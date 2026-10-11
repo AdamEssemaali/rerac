@@ -137,6 +137,11 @@ pub struct VendorRt {
     /// first render sets (the camera's position, rows identity: looking along +x; the Euler restored at the leave).
     remote_moby: bool,
     remote_cam: Option<CameraView>,
+    /// The gold-weapon offer's upgrade demo runs (`FUN_002aea70`: 0x1ca968 = the offer, [`VendorRt::moby`]); its end is
+    /// `FUN_002aecf0`, not `VendorExit`.
+    gold: bool,
+    /// Its hand request (0x141408 = the item), handed to the session on the demo's first frame.
+    gold_hand: Option<i32>,
 }
 
 /// The class blob of `o_class` in the level core (joint lists).
@@ -323,7 +328,37 @@ pub fn after_tick(
             }
             // crate::scene_render's.
             h @ (Handoff::Scene { .. } | Handoff::Movie { .. }) => keep.push(h),
-            Handoff::ShipMenu | Handoff::GoldUpgrade { .. } => {}
+            // `FUN_002aea70(offer, item)`: mode 5 in substate 3 with the item's demo scene in the offer's frame:
+            // `snd_PauseAllSoundsInGroup(0x1d)`, `music_Pause(0)`; the HUD's slots emptied (`FUN_0024fb00`); Ratchet
+            // `SetState(100, 1)` and hidden (0x1413f5, `FUN_002486c0`); the hand request 0x141408 = the item.
+            Handoff::GoldUpgrade { offer, item } => {
+                let Some(t) = vr.tables.clone() else { continue };
+                let v = Vendor::gold_upgrade(t, gs, item.max(0) as usize);
+                let Some(scene) = v.demo_scene(item.max(0) as usize) else {
+                    eprintln!("interact: frame {frame}: gold upgrade of item {item}: no demo scene");
+                    continue;
+                };
+                println!("interact: frame {frame}: FUN_002aea70: the gold upgrade of item {item}, demo scene unknown_1530[{scene}] at moby {offer}");
+                if let Some(a) = audio.as_deref_mut() { a.system().menu_open(); }
+                if let Some(f) = feed.as_deref_mut() {
+                    f.reset = f.reset.wrapping_add(1);
+                    f.prompt = false;
+                }
+                let mut f = rc_game::moby_update::services::HeroFields::of(&play.game.hero);
+                f.call(rc_game::moby_update::services::HeroCall::SetState { id: 100, play: true });
+                play.svc.hero_writes = Some((play.game.counter, f));
+                vr.gold_hand = Some(item);
+                crate::travel_render::request_gold_demo(scene, offer);
+                vr.vendor = Some(v);
+                vr.moby = Some(offer);
+                vr.gold = true;
+                vr.draw = VendorDraw::default();
+                // 0x15f5c4 = 5 (the offer saves once it is 0 again: `FUN_002aecf0`).
+                play.svc.game_mode = 5;
+                play.game.camera_paused = true;
+                mode.set(Mode::Vendor);
+            }
+            Handoff::ShipMenu => {}
         }
     }
     play.svc.interact.handoffs = keep;
@@ -465,6 +500,7 @@ pub fn vendor_frame(
     let ticked = std::mem::take(&mut mm.world_ticked);
     let bolts0 = gs.global.bolts;
     let mut out = v.frame(&input, gs, items, sess, assets, &mut play.game.rng);
+    if let Some(i) = vr.gold_hand.take() { sess.temp_hand = i; }
     // VendorStartWeaponDemo 0x2ae7f8: the demo scene plays in the vendor's frame (the space-scene player,
     // crate::travel_render, `rc_game::travel::space::SUB_DEMO`), the hand request 0x141408 = the bought weapon (0 for the
     // Drone Device 0x18); substate 3 ends with `VendorExit(1)` when the demo is over.
@@ -610,7 +646,26 @@ pub fn vendor_frame(
     if out.exit {
         // VendorExit 0x2ae660: mode 0, the HUD slots released, the vendor's state 1, Ratchet teleported in front of the
         // vendor facing it (state 0), CameraScript2(2) from the vendor view, music_Unpause.
-        if let Some(id) = moby { rc_game::moby_update::classes::vendor::on_exit(&mut play.game.mobys, id); }
+        if vr.gold {
+            // `FUN_002aecf0`: mode 0, `SetState(0, 1)`, Ratchet shown (0x1413f5 = 0, `FUN_002487a8`) and teleported to the
+            // offer's demo point (rows · (0, 6, 0) + its position) facing its yaw − π/2 (`HeroTeleport(…, 0, 1)`: the
+            // follow camera behind him), `update_resource_counter`, the voice stopped, `snd_ContinueAllSoundsInGroup(0x1d)`,
+            // `music_Unpause`.
+            vr.gold = false;
+            play.svc.game_mode = 0;
+            if let Some(m) = vm.as_ref() {
+                let pos = vendor::to_world(&m.rows, [m.position[0], m.position[1], m.position[2]], rc_game::travel::space::GOLD_DEMO_OFFSET);
+                let yaw = rc_game::moby_update::interact::add_rot(m.rotation[2], rc_game::travel::space::GOLD_DEMO_YAW);
+                let mut f = rc_game::moby_update::services::HeroFields::of(&play.game.hero);
+                f.clear_motion();
+                f.pose = Some(rc_game::moby_update::services::HeroPose { pos, yaw, target_yaw: yaw });
+                f.call(rc_game::moby_update::services::HeroCall::SetState { id: 0, play: true });
+                play.svc.hero_writes = Some((play.game.counter, f));
+                play.svc.cinematic.calls.push(rc_game::cinematic::CinematicCall::CameraResetBehindHero);
+                if let Some(a) = audio.as_deref_mut() { a.system().hero_teleported(pos); }
+            }
+            vr.moby = None;
+        } else if let Some(id) = moby { rc_game::moby_update::classes::vendor::on_exit(&mut play.game.mobys, id); }
         if vr.remote_moby {
             // The remote vendor: `SetState(0, 1)` where he stands, no camera script, the moby deleted (0x1ca980 ≠ 0).
             let mut f = rc_game::moby_update::services::HeroFields::of(&play.game.hero);
@@ -623,7 +678,7 @@ pub fn vendor_frame(
             vr.remote_moby = false;
             vr.remote_cam = None;
             vr.moby = None;
-        } else if let (Some(m), Some(c)) = (vm.as_ref(), cam) {
+        } else if let (Some(m), Some(c), Some(_)) = (vm.as_ref(), cam, vr.moby) {
             let exit = v.tables.layout.as_ref().map_or([3.5, 0.0, 0.0], |l| l.exit);
             let pos = vendor::to_world(&m.rows, [m.position[0], m.position[1], m.position[2]], exit);
             let yaw = rc_game::moby_update::interact::add_rot(m.rotation[2], std::f32::consts::PI);

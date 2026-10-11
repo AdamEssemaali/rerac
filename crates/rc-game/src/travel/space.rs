@@ -59,6 +59,10 @@ pub const VENDOR_AUDIO_BASE: i32 = 10000;
 /// yaw added to the vendor's (π).
 pub const VENDOR_DEMO_OFFSET: [f32; 3] = [4.0, 0.0, 0.0];
 pub const VENDOR_DEMO_YAW: f32 = std::f32::consts::PI;
+/// The gold-weapon offer's upgrade demo (`FUN_002aea70`): the offset in the offer's frame (gp−0x5b00 = 0x161100) and the
+/// yaw added to the offer's (−π/2); `FUN_002aecf0` puts Ratchet back there, facing that way.
+pub const GOLD_DEMO_OFFSET: [f32; 3] = [0.0, 6.0, 0.0];
+pub const GOLD_DEMO_YAW: f32 = -std::f32::consts::FRAC_PI_2;
 /// Chunk ticks (NTSC 0x60, PAL 0x50).
 pub const CHUNK_TICKS: i32 = 0x60;
 /// The space-audio stream ids are 40000 + k (`space_audio[k]`).

@@ -73,8 +73,9 @@ pub const TRAVEL_LAYER: usize = 26;
 enum Request {
     Leave(i32),
     ShipTravel(i32),
-    /// A weapon demo scene `unknown_1530[scene]` in the frame of moby `frame` (the vendor).
-    Demo { scene: i32, frame: usize },
+    /// A weapon demo scene `unknown_1530[scene]` in the frame of moby `frame` (the vendor; with `gold`, the gold-weapon
+    /// offer's frame: `FUN_002aea70`).
+    Demo { scene: i32, frame: usize, gold: bool },
 }
 
 static QUEUE: Mutex<VecDeque<Request>> = Mutex::new(VecDeque::new());
@@ -97,7 +98,14 @@ pub fn request_ship_travel(dest: i32) {
 /// played in the vendor's frame (`rc_game::travel::space::SUB_DEMO`); its end is [`take_weapon_demo_done`].
 pub fn request_weapon_demo(scene: i32, vendor: usize) {
     println!("travel: VendorStartWeaponDemo: the demo scene unknown_1530[{scene}] in moby {vendor}'s frame");
-    queue().push_back(Request::Demo { scene, frame: vendor });
+    queue().push_back(Request::Demo { scene, frame: vendor, gold: false });
+}
+
+/// `FUN_002aea70(offer, item)`'s scene (crate::interact_render): `unknown_1530[scene]` in the gold-weapon offer's frame
+/// (`space::GOLD_DEMO_OFFSET` / `GOLD_DEMO_YAW`); its end is [`take_weapon_demo_done`] as for the vendor's.
+pub fn request_gold_demo(scene: i32, offer: usize) {
+    println!("travel: the gold upgrade's demo scene unknown_1530[{scene}] in moby {offer}'s frame");
+    queue().push_back(Request::Demo { scene, frame: offer, gold: true });
 }
 
 static DEMO_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -349,10 +357,11 @@ fn pre_tick(
                     }
                 }
                 Request::ShipTravel(dest) => ship_travel(t, p, &mut mm, gs.as_deref_mut(), &level.0, dest),
-                Request::Demo { scene, frame } => match usize::try_from(scene).ok().and_then(demo_lump) {
+                Request::Demo { scene, frame, gold } => match usize::try_from(scene).ok().and_then(demo_lump) {
                     Some(l) => {
+                        let (off, yaw) = if gold { (space::GOLD_DEMO_OFFSET, space::GOLD_DEMO_YAW) } else { (space::VENDOR_DEMO_OFFSET, space::VENDOR_DEMO_YAW) };
                         with_world(p, level.0.collision.as_ref(), |w| {
-                            let fr = space::DemoFrame::of_moby(w, frame, space::VENDOR_DEMO_OFFSET, space::VENDOR_DEMO_YAW);
+                            let fr = space::DemoFrame::of_moby(w, frame, off, yaw);
                             t.mode.demo_start(w, l.clone(), fr, space::DEMO_STREAM);
                         });
                         start_actors(t, l);

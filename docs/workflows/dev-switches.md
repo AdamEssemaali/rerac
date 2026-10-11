@@ -84,6 +84,7 @@ module that reads it: `grep -rn '"RC_' crates/` lists them all.
 | `RC_HERO_AT` | `x,y,z[,yaw]`: place Ratchet there at the level load, before the hero init's ground snap (debug; e.g. on a grind rail with `RC_GIVE_ITEMS=29`) |
 | `RC_LEVEL_CAMERAS` | `0`: do not load the level's camera records (no class-17 regions: the follow camera alone, as before `rc_game::follow_camera::level`; for before / after comparisons) |
 | `RC_GIVE_BOLTS` | `n`: start with n bolts (debug; e.g. to buy at the Gadgetron vendor) |
+| `RC_GIVE_GOLD_BOLTS` | `n`: n gold bolts collected from the start (debug; e.g. to buy a gold weapon on Novalis) |
 | `RC_INTERACT_TRACE` | `1`: log the context prompt's owner changes, the "use" hand-offs (vendor, talkers), vendor purchases and sounds (docs/plan/interaction.md) |
 
 Examples:

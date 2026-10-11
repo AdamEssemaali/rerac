@@ -17,7 +17,7 @@
 //!   (1456–1465) → state 2;
 //! * state 1: talk radius +0x0c = 1.9, `NpcTalkUpdate`; when the node advanced last (+0x04) is 2 (the buy node, which
 //!   has no scene): the gold weapon owned, bolts −= its gold price (`0x1c4544 + 0x18·item`), `FUN_002aea70(offer)`
-//!   (the upgrade effect, not ported: [`Handoff::GoldUpgrade`]), state 4;
+//!   (the upgrade's demo: [`Handoff::GoldUpgrade`], played by the engine's vendor mode), state 4;
 //! * state 2: the prop is deleted once its gold weapon is owned;
 //! * state 4: outside game mode 0 wait; else `memcard_Save(0, −1)` (`crate::cinematic::save`) and state 3.
 

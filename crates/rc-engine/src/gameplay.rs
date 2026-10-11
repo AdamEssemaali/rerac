@@ -175,6 +175,12 @@ pub fn boot_state(root: &std::path::Path, index: u32) -> Option<(GameState, Sess
         gs.global.bolts = n;
         println!("game state: RC_GIVE_BOLTS: {n} bolts");
     }
+    // RC_GIVE_GOLD_BOLTS=<n>: n gold bolts collected (debug; e.g. to buy a gold weapon): the first n bytes of the per-level
+    // gold bolt flags (save chunk 3003, 4 per level) set.
+    if let Some(n) = std::env::var("RC_GIVE_GOLD_BOLTS").ok().and_then(|v| v.trim().parse::<usize>().ok()) {
+        for b in gs.levels.iter_mut().flat_map(|l| l.gold_bolts.iter_mut()).take(n) { *b = 1; }
+        println!("game state: RC_GIVE_GOLD_BOLTS: {n} gold bolts");
+    }
     // RC_UNLOCK_PLANETS=<p>,<p>,...: those planets unlocked (`UnlockPlanet` 0x2756d0: 0x13dd40 and the map order
     // 0x13d510) from the start (debug): the ship's planet page lists them (rc_game::travel).
     if let Ok(v) = std::env::var("RC_UNLOCK_PLANETS") {

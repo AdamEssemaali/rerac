@@ -424,6 +424,18 @@ impl Vendor {
         if self.remote { self.tables.shop.pda_ammo_price(item) as i32 } else { self.tables.shop.ammo_price(item) as i32 }
     }
 
+    /// `FUN_002aea70(offer, item)` (the gold-weapon offer's upgrade, `moby_update::classes::item_offer`): mode 5 straight in
+    /// substate 3 (0x1ca940 = 3, timer 0, 0x1ca968 = the offer): the item's demo scene (0x1ca4a0[item], [`Self::demo_scene`])
+    /// plays in the offer's frame, none of the menu; its end is `FUN_002aecf0` instead of `VendorExit`.
+    pub fn gold_upgrade(tables: VendorTables, gs: &GameState, item: usize) -> Vendor {
+        let mut v = Vendor::open(tables, gs, true, &mut VendorOut::default());
+        (v.sub, v.t, v.pre_fade, v.fade, v.bought) = (3, 0, 0, 0.0, item as i32);
+        v
+    }
+
+    /// 0x1ca4a0[item]: the item's demo scene.
+    pub fn demo_scene(&self, item: usize) -> Option<i32> { self.layout_demo(item) }
+
     /// The weapon price (the discounted one while the flag 0x13d4e3 is set).
     fn price(&self, gs: &GameState, item: usize) -> i32 {
         if discount(gs) { self.tables.shop.discounted(item) } else { self.tables.shop.price(item) }
