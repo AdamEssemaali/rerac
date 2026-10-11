@@ -1,6 +1,6 @@
 # Roadmap
 
-## Status (2026-10-09)
+## Status (2026-10-11)
 
 Where the port stands; the milestone lists below are the historical record (their "Since" notes say where an item
 went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 2026-10-04" at the top).
@@ -10,41 +10,59 @@ went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 202
   memory card, and all 19 levels with their story: batch C (2026-10-02 .. 10-04, one `docs/plan/planet_*.md` per
   planet) ported every placed class; `rc-trace class-census` lists no placed class without a port on any level
   (classes created only by code show up through `RC_UNPORTED=1`, G-TOOL-017).
-- **Releases:** v0.1.0-alpha (2026-09-30), v0.2.0-alpha (10-05), v0.2.1 / v0.2.2 (10-06), v0.2.3-alpha (10-07), with
+- **Releases:** v0.1.0-alpha (2026-09-30), v0.2.0-alpha (10-05), v0.2.1 / v0.2.2 (10-06), v0.2.3-alpha (10-07),
+  v0.3.0-alpha (10-09), with
   the launcher (one-time extraction from the player's own disc image, mods) and the website (launcher_contract.md,
   launcher_extractor.md, mods.md).
 - **Systems complete enough to play:** hero on foot and every body (Clank, Giant Clank, the Hologuise), all weapons and
   gadgets incl. the gold versions, the hoverboard and races, the level camera classes, vendors, the HUD, pause pages,
   help system, in-engine scenes, item scenes and FMVs, audio (989snd grains, music, reverb, scene speech), particles,
   water and sea, shadows, checkpoints and the death reload in the game's order (measured against PCSX2 over PINE).
-- **Since the last releases (2026-10-07 .. 10-09):** play-test fixes, mostly from the user's runs and testers:
+- **In v0.3.0-alpha (2026-10-07 .. 10-09):** play-test fixes, mostly from the user's runs and testers:
   the death reload's resets audited on every level (`rc-trace death-census`); the loaded save's persistent death bits
   now reach the classes' latches (a lift or gate activated before a save holds after a load, as after a death); a
   class sees a `SwitchCharacter` made earlier in the same moby loop (Orxon's sliding blocks); a cutscene camera's end
   gives Clank / Giant Clank their idle (Clank frozen after Orxon's turret shots); Orxon's gadgetbot bubbles, the
   backpack Clank after a body hand-over, the per-level scene hook (canopy glass), boss meters over a death, the
   Snagglebeast fight, display settings (aspect, resolutions, fullscreen).
+- **Since v0.3.0-alpha (2026-10-09 .. 10-10), for 0.3.1:**
+  - play-test fixes: every weapon empty after a death (the respawned hero's ammo), Clank / Giant Clank stuck in the
+    look stance, the vendor's ammo icon staying on the weapon counter, Gemlik's O2 Mask from the start, the Comet-Strike
+    on the Magneboots, the Metal Detector's head, the Gadgets page's 3D Ratchet (item animations, Heli-Pack), the boots
+    hiding Ratchet's feet, the jet HUDs' target lock;
+  - performance (performance.md §8): one game tick per drawn frame at most 60 a second (120 Hz: ~145% → ~87% CPU, no
+    doubled or skipped pictures), three task-pool threads (~25% less CPU), uploads only on change, no Bevy light
+    clustering, the colour-only world draws in the game's order (batched); `RC_DRAW_STATS=1`, `RC_RENDER_DIAG=1`;
+  - graphics options on the Port Options page (graphics_options.md): a Preset (Original / Enhanced), Anti-aliasing
+    (Original = the game's AA blit and display copy, Off, 2x / 4x / 8x), Detail distance, Texture filtering, HUD
+    (Original / Sharp pixels); every Original is the PS2's look, checked against the previous build.
 - **Verification:** goldens for every loader (`crates/rc-formats/tests/`, snapshot hashes); PCSX2 comparisons are made
   per question with the PINE probes (`rc-trace read / dump-ee / pine-write --pine`, `work/scratch/*_probe.py`) rather
   than with a full trace harness; the frame-exact trace comparison of M4 is still open (G-TOOL-003..012).
 
 **Open, in order of what the player meets:**
 
-1. **QA of the recent fixes**: the user's test requests (`docs/test-requests/2026-10-0*.md`) and the 2026-10-09 Orxon
-   fixes (bubbles, sliding blocks, lift after a load, checkpoint respawn in Clank's section, the turret cutaway).
+1. **QA of the recent fixes**: the user's test requests (`docs/test-requests/2026-10-0*.md`), the 2026-10-09 Orxon
+   fixes (bubbles, sliding blocks, lift after a load, checkpoint respawn in Clank's section, the turret cutaway), the
+   0.3.1 fixes above and the graphics options (each row, the preset, a change at run time, the saved settings).
 2. **Music through Aridia's scene 1** (Skid's agent after the last sandshark, testers' report): not reproduced
    headless (frame-exact and real-time, forced shark count); waiting for an `RC_AUDIO_TRACE=1` log of a real run.
 3. **Smaller behaviours**: Orxon's 10-gadgetbot gate after a reload past it (the turret's latch: the original's code
    says it stays shut, unconfirmed in play), `SetMissionDone(1)` logged every tick on Blarg after the Hydrodisplacer,
    the stray antenna glow in the Hydrodisplacer pickup scene; from the user's play tests, not yet looked at: nanotech
    respawn, ship collision, Gemlik's Magneboots wall, Blarg's warship crash and sound, Aridia's teleporter doors,
-   Eudora's infobot twice, Ratchet's head size on stopping, weapon counter icon / hiding, weapons visible while
-   swimming, camera features).
+   Eudora's infobot twice, Ratchet's head size on stopping, the weapon counter's hiding (its icon: fixed 0fe5dd3),
+   weapons visible while swimming, camera features).
 4. **Fidelity rows in gaps.md**: the GS state of class draws (G-REN-036), stale collision output (G-CLS-036),
    particle–moby collision (G-PRT-009), HUD slot leftovers (G-UI-030), the race records' save chunk (G-LVL-007).
-5. **Deferred packages**: the hero feel pass (G-HERO-001, hero_feel_pass.md), statistics (G-SAV-009), performance
-   (performance.md: 90-100 fps and ~1 GB on Metropolis against the PS2's 60 fps in ~20 MB; G-TOOL-001), the strict
-   native pass (hardware_fidelity_layers.md), the PCSX2 trace verification (G-TOOL-003..012, 018).
+5. **Graphics options, the rest** (graphics_options.md): HUD "High resolution" (the HUD drawn at the frame's
+   resolution), then the Enhanced preset uses it; the orb glow against PCSX2 at native resolution (the user's shots).
+6. **Performance, the rest** (performance.md §8): first-sight stalls when a moby class is first drawn (P3, the likely
+   cause of the testers' stutters: pre-warm the pipelines at load), memory (~1 GB against the PS2's ~20 MB level: not
+   profiled yet), the draw and entity count (P2).
+7. **Deferred packages**: the hero feel pass (G-HERO-001, hero_feel_pass.md), statistics (G-SAV-009), area-slowdown
+   profiling (G-TOOL-001), the strict native pass (hardware_fidelity_layers.md), the PCSX2 trace verification
+   (G-TOOL-003..012, 018).
 
 ### Status (2026-09-27), kept for history
 
