@@ -248,6 +248,11 @@ fn map_page_on_novalis() {
     m.map.state = st;
     m.map.loader = Loader(Some(Arc::new(map_file)));
     m.map.hero = HeroMark { pos: [162.5, 136.4, 60.5], yaw: 0.5, group: 0 };
+    // The hook mobys by the level's slot k (global slot = base[1] + k = 2 + k; a marker names the global slot).
+    m.saves.landmark_base = vec![0, 2, 15, 19, 34, 37, 46, 50, 54, 58, 60, 65, 69, 74, 86, 93, 100, 107, 114, 121];
+    let hooked: Vec<i16> = m.map.tables.markers[1].iter().map(|k| k.idx).filter(|&i| i >= 0).collect();
+    assert!(!hooked.is_empty(), "Novalis has hook markers");
+    for &i in &hooked { m.map.hooks.insert(i as i32 - 2, (150.0 + i as f32, 120.0, 0.25)); }
     m.enter(10, &gs);
     let mut f = 0;
     for _ in 0..16 { frame(&mut m, &mut gs, 0, [0.0; 4], &mut f); }
@@ -265,6 +270,10 @@ fn map_page_on_novalis() {
         assert_eq!(k.shown, want, "{k:?}");
     }
     assert!(m.map.markers.iter().any(|k| k.shown), "an open mission on the first arrival");
+    for k in m.map.markers.iter().filter(|k| k.idx >= 0) {
+        let want = m.map.state.transforms[1].to_map(150.0 + k.idx as f32, 120.0);
+        assert_eq!(((k.u, k.v), k.rot), (want, 0.25), "marker {} at its hook moby (global slot {})", k.idx, k.idx);
+    }
     let a = rc_game::menus::MenuAssets::new(rc_game::hud::HudAssets { icons: Vec::new(), frame_sizes: Vec::new(), glyphs: rc_formats::font::parse_glyph_tables(&d.ov1).unwrap().0, messages: Vec::new() }, ov.clone());
     let mut draws = Vec::new();
     m.draw(&a, &gs, &MenuEnv::default(), &mut rc_game::rng::Rng::new(), &mut draws);

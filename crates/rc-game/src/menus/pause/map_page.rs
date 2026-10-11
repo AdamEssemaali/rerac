@@ -72,7 +72,8 @@ pub struct MapPage {
     pub tables: MapTables,
     pub missions: Vec<Mission>,
     pub markers: Vec<Marker>,
-    /// The current level's hook mobys (0x179638: slot → x, y, angle), given by the engine when the menu opens.
+    /// The current level's hook mobys (0x179638: the level's slot k → x, y, angle; global slot = base + k), given by the
+    /// engine when the menu opens.
     pub hooks: std::collections::HashMap<i32, (f32, f32, f32)>,
     /// Per level, the CLUT of the grid icon's frame (0xe999, frame = the level): the draw's TEX0 takes its CBP from
     /// `GetFrameTex(GetIconFrame(0xe999, shown))`, so the picture is drawn with that palette (the CLUT the compose
@@ -262,15 +263,18 @@ pub fn draw(m: &mut PageMenu, w: u32, a: &MenuAssets, gs: &GameState, out: &mut 
     8
 }
 
-/// `fun_00200600(cx, cy, w, h, angle, …)`: a frame drawn centred at (cx, cy), `w × h`, turned by `angle`.
+/// `fun_00200600(cx, cy, w, h, angle, tw, th, tex)` (boot 0x200600): a frame centred at (cx, cy), `w` and `h` its half
+/// sizes. The texture's u axis runs along A = h·(sin a, cos a), its v axis along B = w·(−cos a, sin a): the strip puts
+/// texel (tw, 0) at c + A − B, (tw, th) at c + A + B, (0, 0) at c − A − B and (0, th) at c − A + B. At angle 0 the
+/// frame is turned a quarter clockwise on screen, and a larger angle turns it anticlockwise.
 #[allow(clippy::too_many_arguments)]
 pub fn rotated(frame: usize, cx: f32, cy: f32, w: f32, h: f32, angle: f32, tw: i32, th: i32) -> MenuDraw {
     let (s, c) = angle.sin_cos();
-    let corner = |x: f32, y: f32| [(cx + x * c - y * s).round() as i32, (cy + x * s + y * c).round() as i32];
-    let (hw, hh) = (w * 0.5, h * 0.5);
+    let (a, b) = ([h * s, h * c], [-w * c, w * s]);
+    let p = |su: f32, sv: f32| [(cx + su * a[0] + sv * b[0]).round() as i32, (cy + su * a[1] + sv * b[1]).round() as i32];
     MenuDraw::Quad {
         tex: QuadTex::Frame(frame),
-        pos: [corner(-hw, -hh), corner(hw, -hh), corner(-hw, hh), corner(hw, hh)],
+        pos: [p(-1.0, -1.0), p(1.0, -1.0), p(-1.0, 1.0), p(1.0, 1.0)],
         uv: [[0, 0], [tw, 0], [0, th], [tw, th]],
         rgba: 0x8080_8080,
         repeat: false,
@@ -547,6 +551,9 @@ fn fixed_point(idx: i16) -> Option<(f32, f32)> {
 /// ones, the hook moby's position and angle on the current level, the landmark's elsewhere) and whether it shows (its
 /// mission open, or no mission). The label boxes are sized by the draw ([`draw_markers`]).
 pub fn setup_markers(m: &mut PageMenu, gs: &GameState, dest: i32, centre: bool) {
+    // A marker's index is a global slot (`0x179638[idx]`, the landmarks `0x13d5b0 + 16·idx`); the hooks are the
+    // current level's slots k (global = base[level] + k: the level ranges 0x1c4938).
+    let base = m.saves.landmark_base.get(m.map.state.level.max(0) as usize).copied();
     let p = &mut m.map;
     let cur = p.state.level;
     let visited = (0..map::LEVELS as i32).contains(&dest) && gs.levels.get(dest as usize).is_some_and(|l| l.visited != 0);
@@ -562,7 +569,7 @@ pub fn setup_markers(m: &mut PageMenu, gs: &GameState, dest: i32, centre: bool) 
         if let Some((u, v)) = fixed_point(k.idx) {
             (k.u, k.v) = (u, v);
         } else if dest == cur {
-            if let Some(&(x, y, rot)) = p.hooks.get(&(k.idx as i32)) {
+            if let Some(&(x, y, rot)) = base.and_then(|b| p.hooks.get(&(k.idx as i32 - b))) {
                 (k.u, k.v) = map::world_to_map(&p.state.transforms, dest, false, x, y);
                 k.rot = rot;
             }
