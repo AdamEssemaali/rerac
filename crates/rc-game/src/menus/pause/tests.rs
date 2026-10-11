@@ -340,11 +340,10 @@ fn port_page_from_the_disc() {
     assert_eq!(opts, vec![(20254, 3), (20255, 4), (20256, 5), (20258, 3), (20259, 3), (20260, 3), (port::text::ENTRY as i16, 3), (20262, 3)]);
     let Data::Label(l) = &m.widgets[&port::OPTIONS_LABEL].data else { panic!() };
     assert_eq!(l.table.as_deref(), Some(&[20273, 20274, 20275, 20277, 20278, 20279, port::text::DESCRIPTION as u32, 20281][..]));
-    // The page: Cheats' frames (more than two rows: one wide panel), the list in its list's slot, the sub-pages' hint
-    // list (Subtitles' W4) in its hint slot, parent Options.
+    // The page: Camera's frames (more than two rows), filler and hint widgets, parent Options.
     let (pg, sub) = (&m.pages[&port::PAGE], m.pages[&port::MODEL_MANY].clone());
     assert_eq!((pg.seqs, pg.parent, pg.focus), (sub.seqs, port::OPTIONS, port::LIST_W));
-    assert_eq!((pg.widgets[1], pg.widgets[2], pg.widgets[3]), (port::LIST_W, m.pages[&port::MODEL_FEW].widgets[4], 0));
+    assert_eq!((pg.widgets[1], pg.widgets[2], pg.widgets[4]), (sub.widgets[1], sub.widgets[2], sub.widgets[4]));
     assert!(matches!(&m.widgets[&port::TITLE_W].data, Data::Label(t) if t.flags == 0xf && t.id == port::text::TITLE as u32));
 
     // Pause → Options → Up twice (wrap to Quit Game, then Port Options) → ✕ → the page; ✕ cycles; △ back.
@@ -383,6 +382,9 @@ fn port_page_from_the_disc() {
     }
     let o = m.tick(&press(button::DOWN), &mut g, &env);
     assert!(o.sounds.is_empty(), "last row: no cursor move");
+    // The list scrolls: the last rows are the ones shown.
+    let Data::Port(pl) = &m.widgets[&port::LIST_W].data else { panic!() };
+    assert_eq!(pl.top as usize, port::ENTRIES.len() - port::VISIBLE);
     for _ in port::row_of(Setting::Shadows).unwrap() + 1..port::ENTRIES.len() { m.tick(&press(button::UP), &mut g, &env); }
     m.tick(&press(button::CROSS), &mut g, &env);
     assert_eq!((m.port_value(Setting::Shadows), m.port_value(Setting::AntiAliasing)), (Some(1), Some(0)));

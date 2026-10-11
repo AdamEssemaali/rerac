@@ -38,4 +38,4 @@ Enhanced: Anti-aliasing 4x (the best of 4x / 2x the GPU offers), Detail Far, Tex
 * Persisted keys in the port settings file: `anti_aliasing` (`original`, `off`, `2x`, `4x`, `8x`), `hud`, `textures`,
   `detail` (values: the lower-case names). `RC_GFX_ANTI_ALIASING`, `RC_MSAA=0|2|4|8`, `RC_GFX_HUD`, `RC_GFX_TEXTURES`,
   `RC_GFX_DETAIL`, `RC_GFX_PRESET=original|enhanced` override at start.
-* The Port Options page (nine rows) uses the Goodies / Cheats page's frame (one wide panel; port.rs `MODEL_MANY`).
+* The Port Options page (nine rows) keeps the Camera sub-page's frame and scrolls, four rows at a time (port.rs `VISIBLE`).

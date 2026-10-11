@@ -5,8 +5,7 @@
 //!
 //! It is built entirely from the game's own machinery so it looks and behaves like the Options sub-pages:
 //! a page record whose frame-moby seqs, filler widgets and "✕ Toggle / △ Exit" hint list are those of a
-//! game sub-page ([`MODEL_FEW`] Subtitles for ≤ 2 rows, [`MODEL_MANY`] Cheats for more; the list takes the slot of
-//! the model's own list), a title label with
+//! game sub-page ([`MODEL_FEW`] Subtitles for ≤ 2 rows, [`MODEL_MANY`] Camera for more), a title label with
 //! the sub-pages' flags (0xf), and a list drawn and driven exactly like the camera list (update 0x294cc0 /
 //! draw 0x294e68: label left at 12 in yellow / light blue, value right-aligned at w − 12, rows h/(n+1),
 //! Up/Down without wrap with sound 1, ✕ cycles the value with sound 0, generic Start/Select/R3 and △ keys).
@@ -47,10 +46,13 @@ pub const OPTIONS: u32 = 0x1b4dd0;
 pub const OPTIONS_LIST: u32 = 0x1b4f78;
 pub const OPTIONS_LABEL: u32 = 0x1b4fe8;
 pub const QUIT_PAGE: u32 = 0x1b6060;
-/// Subtitles 0x1b5788 (seqs 73..77: the one/two-row sub-page frames) and Goodies / Cheats 0x1b7fb0 (153..157: one wide
-/// panel tall enough for a long list, its toggle list in slot 1, its hints in slot 2).
+/// Subtitles 0x1b5788 (seqs 73..77: the one/two-row sub-page frames) and Camera 0x1b5ee0 (118..122, three rows). Only an
+/// Options sub-page's frames will do: a page's frame animations start from its parent's layout, and △ plays them
+/// backwards to it (another page's, e.g. Cheats', end on their own parent's layout under the Options page).
 pub const MODEL_FEW: u32 = 0x1b5788;
-pub const MODEL_MANY: u32 = 0x1b7fb0;
+pub const MODEL_MANY: u32 = 0x1b5ee0;
+/// The rows the Camera frame's list panel shows at once; the list scrolls ([`PortList::top`]).
+pub const VISIBLE: usize = 4;
 
 /// The port's own strings (not in the game's text table). Ids are negative; [`MenuAssets::msg`] resolves them.
 pub mod text {
@@ -182,6 +184,8 @@ pub const ENTRIES: &[Entry] = &[
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PortList {
     pub cursor: i32,
+    /// The first row shown ([`VISIBLE`] at a time; the cursor stays among them).
+    pub top: i32,
     pub values: Vec<u8>,
     pub choices: Vec<u32>,
 }
@@ -234,18 +238,11 @@ impl PageMenu {
             moby: 0,
             rect: [0; 4],
             raw: [0; 8],
-            data: Data::Port(PortList { cursor: 0, values: vec![0; ENTRIES.len()], choices: vec![u32::MAX; ENTRIES.len()] }),
+            data: Data::Port(PortList { cursor: 0, top: 0, values: vec![0; ENTRIES.len()], choices: vec![u32::MAX; ENTRIES.len()] }),
         };
-        // The list takes the slot of the model's own list (its focus): its panel. The hints are the sub-pages'
-        // "✕ Toggle / △ Exit" list (Subtitles' W4) in the model's last slot.
-        let slot = model.widgets.iter().position(|&w| w == model.focus).unwrap_or(3);
-        let hints = self.pages.get(&ad.port_model_few).map(|p| p.widgets[4]);
         let mut widgets = model.widgets;
         widgets[0] = TITLE_W;
-        widgets[slot] = LIST_W;
-        if let (Some(h), Some(last)) = (hints, widgets.iter().rposition(|&w| w != 0)) {
-            if last != slot { widgets[last] = h; }
-        }
+        widgets[3] = LIST_W;
         let page = Page { addr: PAGE, seqs: model.seqs, parent: ad.port_options, kind: KIND, focus: LIST_W, widgets, pending: 0 };
         // The Options description label: the disc table (one id per item, variant 0) with ours inserted.
         if let Some(Data::Label(l)) = self.widgets.get_mut(&ad.port_options_label).map(|w| &mut w.data) {
@@ -292,6 +289,7 @@ pub fn update(m: &mut PageMenu, w: u32, inp: &MenuInput, out: &mut MenuOut) -> i
     if inp.pressed_u & button::UP != 0 && p.cursor != 0 { p.cursor -= 1; }
     if inp.pressed_u & button::DOWN != 0 && (p.cursor as usize + 1) < ENTRIES.len() { p.cursor += 1; }
     if p.cursor != start { out.sounds.push(MenuSound::Cursor); }
+    p.top = p.top.clamp(p.cursor - VISIBLE as i32 + 1, p.cursor).max(0);
     let r = p.cursor as usize;
     if inp.pressed_u & button::CROSS != 0 {
         let choices = p.choices.get(r).copied().unwrap_or(u32::MAX);
@@ -308,9 +306,12 @@ pub fn draw(m: &mut PageMenu, w: u32, a: &MenuAssets, out: &mut Vec<MenuDraw>) -
     let Some(wd) = m.widgets.get(&w) else { return 1 };
     let [_, _, ww, wh] = wd.rect;
     let Data::Port(p) = &wd.data else { return 1 };
-    let step = wh / (ENTRIES.len() as i32 + 1);
+    // The camera list's spacing for the rows shown (h/(n+1), n = VISIBLE).
+    let shown = ENTRIES.len().min(VISIBLE);
+    let step = wh / (shown as i32 + 1);
     let mut y = step - 8;
-    for (i, e) in ENTRIES.iter().enumerate() {
+    let top = (p.top.max(0) as usize).min(ENTRIES.len() - shown);
+    for (i, e) in ENTRIES.iter().enumerate().skip(top).take(shown) {
         let col = if i as i32 == p.cursor { YELLOW } else { LIGHT_BLUE };
         print(out, Font::Regular, 0xc, y, col, a.msg(e.label));
         let v = p.values.get(i).copied().unwrap_or(0) as usize;

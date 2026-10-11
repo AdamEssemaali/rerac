@@ -515,11 +515,12 @@ sub-pages (`crates/rc-game/src/menus/pause/port.rs`, `PageMenu::install_port_pag
   as on the disc; the list draws 8 rows with the game's own `h/(n+1)` spacing. The description label W1 (0x1b4fe8, flags 0x90,
   id table 0x1b4fc8 indexed by the list cursor) gets a patched copy of its table (`Label::table`) with the port description at
   the same index, so the table read never runs past the disc's 7 ids.
-* **Page**: a page record (kind 0x7f, parent Options, focus the list) whose 14 frame-moby seqs and widget slots are those of
-  Subtitles 0x1b5788 (≤ 2 rows) or Goodies / Cheats 0x1b7fb0 (3+: one wide panel, seqs 153..157, title / list / hints in
-  slots 0 / 1 / 2). W0 is a clone of the model's title label (flags 0xf: large, centred) with the port title; the port list
-  takes the slot of the model's own list (its focus) and the sub-pages' hint list (Subtitles' W4 0x1b2920, "✕ Toggle /
-  △ Exit") the model's last slot. The port list is
+* **Page**: a page record (kind 0x7f, parent Options, focus the list) whose 14 frame-moby seqs, filler widgets W1/W2
+  (0x1b2878) and hint list W4 (0x1b2920, "✕ Toggle / △ Exit") are those of Subtitles 0x1b5788 (≤ 2 rows; Camera 0x1b5ee0's
+  for 3+). Only an Options sub-page's frames work: a page's frame animations start from its parent's layout and △ plays
+  them backwards to it (with Cheats' frames, tried 2026-10-10, △ left the Options page in the Goodies layout). W0 is a
+  clone of the sub-page title label (flags 0xf: large, centred) with the port title; W3 is the port list, showing
+  `port::VISIBLE` (4) rows at a time and scrolling with the cursor. The port list is
   updated and drawn exactly like the camera list 0x294cc0 / 0x294e68 (rows `h/(n+1)`, first y `h/(n+1) − 8`, label regular at
   (12, y) 0x8020ffff selected / 0x80ffa888, value right-aligned at (w − 12, y) 0x80ffa888; Up/Down without wrap + sound 1; ✕
   cycles the value + sound 0; generic Start/Select/R3 close and △ → Options). Transitions (12 ticks, seqs forward / reversed),
