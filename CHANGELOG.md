@@ -17,6 +17,7 @@ Fixes from playing v0.3.0, smoother frame pacing, and new graphics options.
 - One game step per frame, at up to 60 frames a second: no more doubled or skipped frames, and less work for the computer.
 - New graphics options under Options, Port Options: a preset, anti-aliasing, detail distance, texture filtering and HUD scaling. Every option starts at Original, the PS2's picture on a TV, so the game now looks soft like the original. Set Anti-aliasing to Off for the sharper look of earlier versions.
 - The Port Options page fits all its rows.
+- A Linux version (64-bit PCs), not tested yet: reports welcome.
 
 ## v0.3.0-alpha
 

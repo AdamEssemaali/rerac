@@ -53,14 +53,16 @@ in a macOS `.app`; when neither exists (`cargo dev`, `target/*/rerac`) it uses t
 ## GitHub Actions (`.github/workflows/`)
 
 Only releases run on GitHub (no CI on pushes: checks and tests run locally, `docs/workflows/testing.md`). The release
-workflow builds on `macos-14` (Apple Silicon, the tested platform) and `windows-latest`, installs stable Rust with
+workflow builds on `macos-14` (Apple Silicon, the tested platform), `windows-latest` and `ubuntu-22.04` (glibc 2.35;
+the job installs ALSA, udev, Wayland and xkbcommon headers and `zip`), installs stable Rust with
 rustup and caches with `Swatinem/rust-cache`.
 
 * **`release.yml`** (push of a `v*` tag; or by hand with `workflow_dispatch`, input `tag`: an existing tag to release
   again, or empty to only build the packages as workflow artifacts): one build job per platform runs
   `tools/package/package.sh` (directly: on Windows a bare `bash` from `cargo xtask package` can be WSL's) and checks
   that the tag matches the workspace version; then one release job publishes `rerac-<version>-macos-arm64.zip`,
-  `rerac-<version>-windows-x86_64.zip` (UNTESTED: built, never run; left out with a warning if its job failed) and the
+  `rerac-<version>-windows-x86_64.zip` and `rerac-<version>-linux-x86_64.zip` (UNTESTED: built, never run; each left
+  out with a warning if its job failed) and the
   macOS `rerac-manifest.json`. The launcher picks the zip for its OS and CPU. A missing macOS package stops the
   release. It is marked a prerelease when the tag contains `-alpha`,
   `-beta` or `-rc`. The notes are the tag's `CHANGELOG.md` section, else the tag's annotation. Permissions:
