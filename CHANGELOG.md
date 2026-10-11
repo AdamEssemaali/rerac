@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.1-alpha
+
+Fixes from playing v0.3.0, smoother frame pacing, and new graphics options.
+
+- Dying no longer empties every weapon.
+- Gemlik Base: Ratchet wears his O2 Mask from the start.
+- Clank and Giant Clank no longer get stuck in first person.
+- The weapon counter no longer keeps the vendor's ammo icon, and each weapon shows its own ammo.
+- Vendor: one weapon per press when browsing, and the selection frame shows again.
+- The Comet-Strike works on Magneboots walls and ceilings.
+- The Metal Detector's head points at what it scans.
+- The boots hide Ratchet's feet.
+- Gadgets and Weapons pages: Ratchet plays each item's animation on every planet, and the Heli-Pack spins and folds.
+- Jet fighter missions: locking on to a target close to the ship no longer crashes the game.
+- One game step per frame, at up to 60 frames a second: no more doubled or skipped frames, and less work for the computer.
+- New graphics options under Options, Port Options: a preset, anti-aliasing, detail distance, texture filtering and HUD scaling. Every option starts at Original, the PS2's picture on a TV, so the game now looks soft like the original. Set Anti-aliasing to Off for the sharper look of earlier versions.
+- The Port Options page fits all its rows.
+
 ## v0.3.0-alpha
 
 Dying now works the way it does in the original, and a long list of fixes from play-testing Umbris, Orxon, Gemlik and the rest.
