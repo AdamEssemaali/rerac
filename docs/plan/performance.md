@@ -201,7 +201,9 @@ and the windowed run sat at exactly 60.0 fps, so the window-resolution numbers a
 
 **2026-10-10 pass (release build, Novalis, 60 fps cap).** Frame pacing: one game tick per drawn frame, at most 60
 frames a second (d9c8b94; at 120 Hz the port drew every refresh: ~145% → ~87% CPU, and no frame carries 0 or 2 ticks).
-Three task-pool threads by default (55b2a34, `RC_THREADS`): 28.3 → 21.1 s of CPU over 1,500 frames at 416p. A clean
+Three task-pool threads by default (55b2a34, `RC_THREADS`): 28.3 → 21.1 s of CPU over 1,500 frames at 416p; **reverted
+2026-10-11** to Bevy's default (`RC_THREADS=3` keeps it as an option): with v0.3.1 a Windows PC on Vulkan (16 cores, NVIDIA
+RTX 4080 SUPER, two 4K screens) showed a black window while the game ran; `RC_THREADS=0` or DX12 showed the picture. A clean
 `xctrace` Time Profiler run (no GPU capture, no debug layers) then measured ~55–59% of one core: gameplay tick 4.7%,
 Bevy frustum culling 3.2%, moby animation and buffers ~3%, Bevy bookkeeping ~2.5%, render thread 12.5%. The
 `pre_shadow` split removed one item at a time (O(n²), 2.5 s of CPU per run): one split since ae9e571. Diagnostics:

@@ -31,7 +31,7 @@ went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 202
     on the Magneboots, the Metal Detector's head, the Gadgets page's 3D Ratchet (item animations, Heli-Pack), the boots
     hiding Ratchet's feet, the jet HUDs' target lock;
   - performance (performance.md §8): one game tick per drawn frame at most 60 a second (120 Hz: ~145% → ~87% CPU, no
-    doubled or skipped pictures), three task-pool threads (~25% less CPU), uploads only on change, no Bevy light
+    doubled or skipped pictures), three task-pool threads (~25% less CPU; reverted 2026-10-11: a black window on a Windows PC on Vulkan, `RC_THREADS=3` keeps it as an option), uploads only on change, no Bevy light
     clustering, the colour-only world draws in the game's order (batched); `RC_DRAW_STATS=1`, `RC_RENDER_DIAG=1`;
   - graphics options on the Port Options page (graphics_options.md): a Preset (Original / Enhanced), Anti-aliasing
     (Original = the game's AA blit and display copy, Off, 2x / 4x / 8x), Detail distance, Texture filtering, HUD

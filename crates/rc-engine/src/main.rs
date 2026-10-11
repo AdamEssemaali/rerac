@@ -124,9 +124,6 @@ struct ScreenshotRequest {
     min_frames: u32,
 }
 
-/// The task pools' threads (see the `TaskPoolPlugin` setting in `main`).
-const TASK_THREADS: usize = 3;
-
 fn main() -> anyhow::Result<()> {
     crash_log::install();
     // `--version-json` exits here; a missing or wrong data folder exits with a clear error (crate::disc_source).
@@ -158,12 +155,12 @@ fn main() -> anyhow::Result<()> {
                 ..default()
             })
             .set(AssetPlugin { file_path: asset_dir(), ..default() })
-            // Bevy's task pools share TASK_THREADS threads (RC_THREADS=n overrides; 0: Bevy's default, by core count).
-            // The frame is ~100 small systems: on an 8–10 core machine the default's idle workers spin and wake for each
-            // of them, which costs ~25% more CPU for the same frame (Novalis, 1,500 frames: 28.3 s default, 21.1 s at 3)
-            // with no slow frame added at 3.
+            // Bevy's task pools by core count (its default). `RC_THREADS=n` makes them share n threads: fewer idle workers
+            // waking for the frame's ~100 small systems (Novalis, 1,500 frames: ~28 s of CPU by default, ~21 s at 3). Not
+            // the default: at 3 a Windows PC on Vulkan (16 cores, NVIDIA, two 4K screens) showed a black window while the
+            // game ran, with sound (v0.3.1; the default threads and DX12 both showed the picture).
             .set(TaskPoolPlugin {
-                task_pool_options: match std::env::var("RC_THREADS").ok().and_then(|v| v.trim().parse::<usize>().ok()).unwrap_or(TASK_THREADS) {
+                task_pool_options: match std::env::var("RC_THREADS").ok().and_then(|v| v.trim().parse::<usize>().ok()).unwrap_or(0) {
                     0 => TaskPoolOptions::default(),
                     n => TaskPoolOptions::with_num_threads(n),
                 },
