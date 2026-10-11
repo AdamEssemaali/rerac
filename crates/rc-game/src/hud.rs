@@ -65,7 +65,7 @@
 //! | 0x24fb50 second banner line 0x1795e8 (countdown > 1000) | | NOT ported (G-UI-011) |
 //! | level05 0x24cee8 / level16 0x21e398 race HUD, slots 5 / 7 (`0x2661a0` init, `0x2661e8` update, draws `0x266320` / `0x266710`) | lap and place, time (and the score once the race is won), on the board only; level 16's board-weapon count box (0x238a30) | [`Element::RaceLap`] / [`Element::RaceTime`] (queued by the board's 0x6b entry: `crate::hero::hoverboard`) |
 //! | level05 race HUD slot 0 \| 0x10 (`0x262ae8` / `0x262b58` / `0x262f50`, data 0x13fbb4) | the boost meter, the trick-combo texts, the wrong-way warning (time trials) | [`Element::RaceMeter`] (its game part: `crate::hero::hoverboard::meter_tick`) |
-//! | level02 0x2e1fb8 counters (slots 5 / 7, icons 2000 / 2001, `0x23c990` / `0x23ccc8` / `0x23cda8`) | | NOT ported (G-UI-011, level 02's own element) |
+//! | level02 0x2e1fb8 counters (slots 5 / 7, icons 2000 / 2001, `0x23c990` / `0x23ccc8` / `0x23cda8`) | the sand-shark / nest counters: init the shared `FUN_L00_0023a760` (= the weapon init 0x24f368), update 0x23ccc8 (the ramp, the shown value straight from the data), draw 0x23cda8 (a stretched bar, the element's icon and the count) | [`Element::AridiaCounter`], `draw_aridia_counter`; consumer: `classes::units::aridia_story` (the agent 788) |
 
 use rc_formats::font::{measure_text_width, Font, GlyphTable};
 use rc_formats::hud::{Hud, IconEntry};
@@ -244,6 +244,10 @@ pub enum Element {
     /// The boss meter, slot 6 | 0x10: init 0x24b418, update 0x24b538, the boss draw (level18 0x23cd60), data the
     /// consumer's word published under `key` ([`calls::Calls::boss_meter`]).
     Boss { key: u32 },
+    /// Level 02's shark / nest counters, slots 5 / 7: init the shared `FUN_L00_0023a760` (= the weapon init 0x24f368),
+    /// update 0x23ccc8 (the ramp, the shown value straight from the data), draw 0x23cda8 (a stretched bar, the
+    /// element's icon and the count); data the word published under `key` ([`calls::Calls::aridia_counter`]).
+    AridiaCounter { key: u32 },
     /// The race's lap and place, slot 5 (levels 5 / 16): init 0x2661a0, update 0x2661e8, draw level05 0x266320, no data.
     RaceLap,
     /// The race's time (and the time trial's score), slot 7: init 0x2661a0, update 0x2661e8, draw level05 0x266710.
@@ -678,9 +682,11 @@ impl HudState {
         self.keep_up(h, n);
     }
 
-    /// `FUN_0024b090(handle, flags)`: replace the flags of the slot holding `handle`.
+    /// `FUN_0024b090(handle, flags)`: replace the flags of the slot holding `handle`. The port's handles start at 0
+    /// like the empty slots' default, so only a slot holding an element matches (as [`HudState::keep_up`] /
+    /// [`HudState::release`]; without the guard a handle 0 cleared the wrong slot's flags).
     pub fn set_flags(&mut self, handle: u32, flags: u32) {
-        if let Some(s) = self.slots.iter_mut().find(|s| s.handle == handle) {
+        if let Some(s) = self.slots.iter_mut().find(|s| s.handle == handle && s.last.element != Element::Empty) {
             s.last.flags = flags;
             if !s.pending { s.flags = flags; }
         }
@@ -729,6 +735,13 @@ impl HudState {
             // 0x24ce30 (= 0x24b418), 0x24b418.
             Element::SuckCannon | Element::GiantEnergy | Element::Boss { .. } => self.init_generic(slot),
             Element::BoltAlert => self.init_alert(slot),
+            Element::AridiaCounter { .. } => {
+                // 0x23c990 = the shared weapon init `FUN_L00_0023a760`: timer `ScaleTicks(120) + 30`, 32 × 32 (the
+                // offsets +0x48 / +0x4a are not touched).
+                s.timer = scale_ticks(0x78) + 0x1e;
+                s.size = (0x20, 0x20);
+                self.init_value(slot);
+            }
             Element::RaceMeter => {
                 // 0x262ae8: offset 0, timer ticks(180) + 30, the value (0x24b318); the last combos: the game side's.
                 s.offset = (0, 0);
@@ -798,7 +811,7 @@ impl HudState {
             Element::BoltAlert => i.bolt_alert as i32,
             Element::GiantEnergy => i.energy,
             Element::RaceMeter => i.race_meter.fuel,
-            Element::Boss { key } => self.words.get(&key).copied().unwrap_or(0),
+            Element::Boss { key } | Element::AridiaCounter { key } => self.words.get(&key).copied().unwrap_or(0),
         })
     }
 
@@ -998,6 +1011,7 @@ impl HudState {
                 }
                 Element::SuckCannon => self.update_suck(i),
                 Element::BoltAlert => self.update_alert(i),
+                Element::AridiaCounter { .. } => self.update_aridia_counter(i),
                 Element::RaceMeter => {
                     // 0x262b58's slot part: the shown value approaches the fuel by 6 (`Approach`, truncated).
                     let fuel = self.data(Element::RaceMeter).unwrap_or(0) as f32;
@@ -1093,6 +1107,15 @@ impl HudState {
                 }
             }
         }
+        Self::ramp_generic(s);
+    }
+
+    /// 0x23ccc8: the shown value straight from the data (no counting animation, no timer reset), then the generic
+    /// ramp (0x24b538's tail).
+    fn update_aridia_counter(&mut self, i: usize) {
+        let v = self.data(self.slots[i].element);
+        let s = &mut self.slots[i];
+        if let Some(v) = v { s.shown = v; }
         Self::ramp_generic(s);
     }
 
@@ -1206,6 +1229,7 @@ impl HudState {
                 Element::BoltAlert => self.draw_alert(i, out),
                 Element::GiantEnergy => self.draw_giant(i, out),
                 Element::Boss { .. } => self.draw_boss(i, out),
+                Element::AridiaCounter { .. } => self.draw_aridia_counter(i, out),
                 Element::RaceLap => self.draw_race_lap(i, out),
                 Element::RaceTime => self.draw_race_time(i, out),
                 Element::RaceMeter => self.draw_race_meter(i, out),
@@ -1863,6 +1887,42 @@ mod tests {
     }
 
     fn inputs(hp: i32, bolts: i32) -> Inputs { Inputs { hp, bolts, ..Default::default() } }
+
+    /// Level 02's shark / nest counters (slots 5 / 7; init `FUN_L00_0023a760`, update 0x23ccc8, draw 0x23cda8):
+    /// the agent queues a counter per side and publishes its value; the draw is a 32-tall bar (icon 0x7580) with
+    /// the element's icon and the count, on whichever side the slot's anchor sits. `set_flags(r, 0)` times it out.
+    #[test]
+    fn aridia_counters_draw_the_published_values_on_each_side() {
+        let mut h = HudState::new(assets());
+        let (k5, k7) = (0x0001_014c, 0x0001_0150);
+        let (r5, r7) = (Request::aridia_counter(0x15, icon::BAR, k5, 100), Request::aridia_counter(0x17, icon::BAR, k7, 7));
+        let mut d = Vec::new();
+        for _ in 0..40 {
+            h.apply_calls(&[Call::Data(k5, 53), Call::Data(k7, 2), Call::Queue(r5), Call::Queue(r7)]);
+            d = h.tick(inputs(4, 0));
+        }
+        assert_eq!((h.slots[5].element, h.slots[5].slide, h.slots[5].shown), (Element::AridiaCounter { key: k5 }, 8, 53));
+        assert_eq!((h.slots[7].element, h.slots[7].slide, h.slots[7].shown), (Element::AridiaCounter { key: k7 }, 8, 2));
+        let sprites: Vec<_> = d.iter().filter_map(|x| if let Draw::Sprite { x, y, w, h, alpha, .. } = x { Some((*x, *y, *w, *h, *alpha)) } else { None }).collect();
+        // Left (slot 5, x 24): cap at −4, middle at 28 (70 wide, max 100), flipped cap at 98; the icon frame at 24.
+        assert!(sprites.contains(&(-4, 366, 32, 32, 89)), "{sprites:?}");
+        assert!(sprites.contains(&(28, 366, 70, 32, 89)), "{sprites:?}");
+        assert!(sprites.contains(&(98, 366, 32, 32, 89)), "{sprites:?}");
+        assert!(sprites.contains(&(24, 366, 32, 32, 128)), "{sprites:?}");
+        // Right (slot 7, x 480): the bar runs leftward from 484; the icon at 458.
+        assert!(sprites.contains(&(484, 366, 32, 32, 89)), "{sprites:?}");
+        assert!(sprites.contains(&(436, 366, 48, 32, 89)), "{sprites:?}");
+        assert!(sprites.contains(&(404, 366, 32, 32, 89)), "{sprites:?}");
+        assert!(sprites.contains(&(458, 366, 32, 32, 128)), "{sprites:?}");
+        let texts: Vec<_> = d.iter().filter_map(|x| if let Draw::Text { x, y, text, .. } = x { Some((*x, *y, text.clone())) } else { None }).collect();
+        // "53" (2 × 13 wide) ends at 24 + 0x42 = 90; "2" ends at 480 − 0x1a = 454.
+        assert_eq!(texts, vec![(65, 375, b"53".to_vec()), (64, 374, b"53".to_vec()), (442, 375, b"2".to_vec()), (441, 374, b"2".to_vec())]);
+        // The flags cleared: the counters time out and leave the screen.
+        h.apply_calls(&[Call::SetFlags(r5, 0), Call::SetFlags(r7, 0)]);
+        for _ in 0..300 { d = h.tick(inputs(4, 0)); }
+        assert!(d.is_empty(), "the counters are gone");
+    }
+
 
     /// The context prompt (slot 12, 0x24c898): requested while an owner holds it, slides in over 8 ticks (alpha
     /// 16·slide), one or two lines in a bar frame centred on x 256 at y 50, and fades out once no longer requested.

@@ -45,7 +45,7 @@
 //! | address | what | status |
 //! |---|---|---|
 //! | top | `0x2e1868` (the big-head scene manipulator) | `manip::scene_big_head` |
-//! | `0x2e1fb8` | race state +0x180 = 0 and Ratchet in cuboid +0x148 → 1, the HUD counters `queue_animation_update(0x15, 2000, …, +0x14c, 100)` / `(0x17, 2001, …, +0x150, 7)` (handles +0x164 / +0x160) | the state: [`agent_race`]; the two level-02 HUD elements (`0x23c990` / `0x23ccc8` / `0x23cda8`): NOT ported (G-UI-011) |
+//! | `0x2e1fb8` | race state +0x180 = 0 and Ratchet in cuboid +0x148 → 1, the HUD counters `queue_animation_update(0x15, 2000, …, +0x14c, 100)` / `(0x17, 2001, …, +0x150, 7)` (handles +0x164 / +0x160) | the state: [`agent_race`]; the two level-02 HUD elements (`0x23c990` / `0x23ccc8` / `0x23cda8`): [`crate::hud::Element::AridiaCounter`] ([`show_counters`]; the game reads its data pointers every tick, so the port publishes the values each tick while the counters show) |
 //! | | 1: out of the cuboid → 0, both elements released (`0x238f50(h, 0)`), handles −1; counters 0 and the s16 timer +0x168 out → 2, `FadeToBlack(ticks(16))`, the elements released, the agent at cuboid +0x154's centre facing its row 0, `HeroTeleport(1.5 in front, facing him, 0, 1)`, mobys +0x158 / +0x15c +0xbc = 1, talk auto (+0x08) = 1, node (+0x36) = 2 | [`agent_race`] |
 //! | state 0 | Hoverboard acquired (0x13d506) → `DeleteMoby`; +0x180 = 0, the name, → 1, update distance 0xff, `NpcTalkRegister`, the shadow slab | [`agent_update`] |
 //! | state 1 | talk radius 255 (auto, in cuboid +0x16c) else 2.5; `NpcTalkUpdate` → `PlaceAfterScene(2.5)`, → 2; the node played = 2: `Help_Request(2000, 10)`, `GiveItem(30, 1)`, `SetMissionDone(+0xb0)`, the checkpoint at Ratchet (0x13f3d0 / 0x13f3e0), `memcard_Save`, `DeleteMoby` | [`agent_update`] |
@@ -233,6 +233,39 @@ fn glide(w: &mut World, id: MobyId, a: usize, b: usize, t_off: usize, v_off: usi
     crate::cinematic::camera_targets(w, Some(pos), Some(e));
 }
 
+/// The two counters' requests as the agent 788 queues them (`0x2e1fb8`): slots 5 / 7 (flag 0x10), icons 2000 / 2001,
+/// max 100 sharks / 7 nests.
+const ICON_SHARKS: u16 = 0x7d0;
+const ICON_NESTS: u16 = 0x7d1;
+const SHARK_SLOT: u32 = 0x15;
+const NEST_SLOT: u32 = 0x17;
+const SHARK_MAX: i32 = 100;
+const NEST_MAX: i32 = 7;
+
+/// The HUD data key of one of the agent's counter pvars (`off` = +0x14c sharks / +0x150 nests).
+fn counter_key(w: &World, id: MobyId, off: usize) -> u32 { crate::hud::calls::pvar_key(w.m(id).spawn_id, id, off) }
+
+/// The counters' requests (`queue_animation_update(0x15, 2000, …, +0x14c, 100)` / `(0x17, 2001, …, +0x150, 7)`).
+fn counter_requests(w: &World, id: MobyId) -> [crate::hud::Request; 2] {
+    [
+        crate::hud::Request::aridia_counter(SHARK_SLOT, ICON_SHARKS, counter_key(w, id, 0x14c), SHARK_MAX),
+        crate::hud::Request::aridia_counter(NEST_SLOT, ICON_NESTS, counter_key(w, id, 0x150), NEST_MAX),
+    ]
+}
+
+/// Queues / keeps up both counters and publishes their values (`0x2e1fb8`; the game reads its data pointers every tick,
+/// so the port publishes each tick while they show).
+fn show_counters(w: &mut World, id: MobyId) {
+    let (s, n) = (c::pi32(w, id, 0x14c), c::pi32(w, id, 0x150));
+    w.svc.hud.aridia_counter(counter_key(w, id, 0x14c), SHARK_SLOT, ICON_SHARKS, s, SHARK_MAX);
+    w.svc.hud.aridia_counter(counter_key(w, id, 0x150), NEST_SLOT, ICON_NESTS, n, NEST_MAX);
+}
+
+/// `0x238f50(h, 0)` = `FUN_0024b090`: both counters' flags cleared, so they time out.
+fn release_counters(w: &mut World, id: MobyId) {
+    for r in counter_requests(w, id) { w.svc.hud.set_flags(r, 0); }
+}
+
 /// `0x2e1fb8`: the agent's race watch (module doc).
 fn agent_race(w: &mut World, id: MobyId) {
     let pv = |w: &World, o: usize| p::i32(&w.m(id).pvars, o);
@@ -242,13 +275,14 @@ fn agent_race(w: &mut World, id: MobyId) {
                 p::set_i32(&mut w.mm(id).pvars, 0x180, 0);
                 p::set_i32(&mut w.mm(id).pvars, 0x160, -1);
                 p::set_i32(&mut w.mm(id).pvars, 0x164, -1);
-                w.svc.unported("aridia agent 788: HUD counters 0x23c990 released (G-UI-011)");
+                release_counters(w, id);
             } else if pv(w, 0x14c) == 0 && pv(w, 0x150) == 0 && c::dec_timer_pvar_s16(w, id, 0x168) != 0 {
                 p::set_i32(&mut w.mm(id).pvars, 0x180, 2);
                 let n = w.ticks(0x10);
                 crate::cinematic::fade_to_black(w, n);
                 p::set_i32(&mut w.mm(id).pvars, 0x160, -1);
                 p::set_i32(&mut w.mm(id).pvars, 0x164, -1);
+                release_counters(w, id);
                 if let Some((centre, _)) = story::cuboid(w, pv(w, 0x154)) {
                     let row0 = w.svc.volumes.shape(rc_formats::volumes::ShapeKind::Cuboid, pv(w, 0x154)).map(|s| s.matrix[0]);
                     let yaw = row0.map_or(0.0, |r| c::atan(r[0], r[1]));
@@ -264,11 +298,13 @@ fn agent_race(w: &mut World, id: MobyId) {
                 let pvm = &mut w.mm(id).pvars;
                 p::set_u8(pvm, talk::AUTO, 1);
                 p::set_i16(pvm, talk::NODE, 2);
+            } else {
+                show_counters(w, id);
             }
         }
         0 if story::hero_in(w, pv(w, 0x148)) => {
             p::set_i32(&mut w.mm(id).pvars, 0x180, 1);
-            w.svc.unported("aridia agent 788: HUD counters 0x23c990 (G-UI-011)");
+            show_counters(w, id);
         }
         _ => {}
     }

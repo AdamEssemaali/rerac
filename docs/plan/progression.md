@@ -216,7 +216,7 @@ W save, C checkpoint, X level exit.
 | | help director 1413 | hints | P `help_veldin` |
 | 01 Novalis | arrival / mission NPC 730 / 790, plumber 774, infobot 750 (stand-in), crank 280, checkpoints 805, director 1341 | S 5 (arrival, F 0x0f), the mission (S 3 / 4, P 3, W), the plumber's Infobot (P 2), hints | P (earlier batches) |
 | 02 Aridia | surfer 786 `0x2e0dc0` | talk: D + C; node 2 → IV 2 → I 5 (Sonic Summoner), W; H 2004 near him | P `aridia_story` |
-| | agent 788 `0x2e1950` | the shark race (counters +0x14c / +0x150 from the sharks / nests) → his talk node 2 → H 2000, I 30 (Hoverboard), D, C, W | P (the race's HUD counters: G-UI-011) |
+| | agent 788 `0x2e1950` | the shark race (counters +0x14c / +0x150 from the sharks / nests) → his talk node 2 → H 2000, I 30 (Hoverboard), D, C, W | P `aridia_story` |
 | | item scene 1005 `0x2ea210` | touch → S 4 → I 26 (Trespasser), banner 2015, H 2009, camera glide, W | P `aridia_story` |
 | | 713 `0x2ddc88` | cuboid hints (H 2013 / rec 0x48) and a hero teleport (cutaway) | — G-CLS-033 |
 | | help director 1324 | hints, skill point 1 | P `help_aridia` |
