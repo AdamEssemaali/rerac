@@ -27,6 +27,8 @@ use crate::moby_update::services::World;
 pub const REFERENCE_LEVEL: u32 = 2;
 pub const UPDATE_FN: u32 = 0x2e_2228;
 pub const CLASSES: [i16; 1] = [792];
+/// The arm (class 789, the moby +0xa0 names): its joint list 0 carries the platform.
+pub const JOINTS: [i16; 1] = [789];
 
 const BLOCK: usize = 0x60;
 const ARM: usize = 0xa0;
