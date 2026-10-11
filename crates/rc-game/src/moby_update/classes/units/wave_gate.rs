@@ -13,7 +13,7 @@
 //! |---|---|---|
 //! | the groups up to the first −1 (the loop's pointer does not advance past a −1, so it re-reads it for the remaining of the eight): `0x30ae68(group, −1)` ≠ 0 → nothing this tick | a group still alive | [`update`] ([`alive`]) |
 //! | `0x30ae68(group, s)`: the members of the group list (`0x1abb40[group]`) in a live state (≥ 0), not held by the Suck Cannon (no suck record, `0x2fe8d0` = `0x304100`, or its state < 4) and, unless `s` = −1, not in state `s` | the count | [`alive`] (`react::rec_state`) |
-//! | the ship-combat word 0x140940 ≠ 0 and Ratchet in state 0x32 → nothing | Ratchet's ship mode (G-HERO-002 / G-LVL-009): never in the port, the port takes the other branch | [`update`] (no ship-mode word in the port) |
+//! | the ship-combat word 0x140940 ≠ 0 and Ratchet in state 0x32 → nothing | Ratchet's ship mode (the ridden-vehicle record, [`crate::vehicle::Record`]) | [`update`] |
 //! | cuboid +0x28 ≠ −1 and Ratchet (0x13f3d0) outside it (`0x26b9a8` = `PointInCuboid`) → nothing | | [`update`] (`World::in_cuboid`) |
 //! | +0x20 ≠ −1 → state; +0x24 ≠ −1 → +0xbc | the gate opens | [`update`] |
 //!
@@ -48,7 +48,8 @@ pub fn update(w: &mut World, id: MobyId) {
         if g == -1 { break; }
         if alive(w, g, -1) != 0 { return; }
     }
-    // `0x140940 ≠ 0 && 0x1413d4 == 0x32` (Ratchet's ship mode): the port has no ship-mode word; that state never runs.
+    // `0x140940 ≠ 0 && 0x1413d4 == 0x32`: Ratchet's ship mode.
+    if w.svc.vehicle.moby.is_some() && w.hero.state == 0x32 { return; }
     let cub = c::pi32(w, id, 0x28);
     if cub != -1 {
         let h = crate::moby_update::classes::units::hero_pos(w);

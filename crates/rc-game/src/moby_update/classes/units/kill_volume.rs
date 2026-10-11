@@ -10,7 +10,7 @@
 //! | address | what | port |
 //! |---|---|---|
 //! | state 0 | +0x30 (update distance) = 0xff, → 1 | [`update`] |
-//! | state 1, gate | skipped while `0x1413d4` = 0x32 **and** `0x140940` ≠ 0 **and** that moby's state is not −2 / −3 **and** `0x140944` (its class) = 0x45 | [`update`]: the state test reads the hero ([`MOUNTED`]); the vehicle word `0x140940` is written only by the ships 1242 / 69 / 1379 (unported, G-LVL-009), so it is 0 in the port and the cuboids stay on (the game's own outcome whenever no ship is flown, e.g. Batalia's turret, which mounts him without it) |
+//! | state 1, gate | skipped while `0x1413d4` = 0x32 **and** `0x140940` ≠ 0 **and** that moby's state is not −2 / −3 **and** `0x140944` (its class) = 0x45 | [`update`]: the state test reads the hero ([`MOUNTED`]), the vehicle word the ridden-vehicle record ([`crate::vehicle::Record`], written by the ships' mounts: Gemlik's 69 is class 0x45, so its battle outside the base is safe; Batalia's turret mounts him without it, and the cuboids stay on there) |
 //! | first list | per cuboid ≥ 0: `PointInCuboid(0x13f3d0, c)` (0x274820); body `0x1413f4` = 0: state ≠ 0x77 → `SetState(0x77, 1)` (the level's copy: the port's SetState, level_generalisation.md H2); other bodies: `FadeToBlack(ticks(10))`, the death sequence `0x2319b0` (L06 `0x228230`) | [`update`] (`HeroCall::SetState`, `cinematic::fade_to_black`, `HeroCall::Death`) |
 //! | second list | per cuboid ≥ 0 inside: `FadeToBlack(ticks(10))`, the death sequence | [`update`] |
 //! | | no sound, particle, light, HUD, save flag, other moby; the death sequence counts the deaths (`hero::damage::death_fade`) | n/a |
@@ -34,9 +34,8 @@ const FADE: i32 = 10;
 /// Cuboids per list.
 const PER_LIST: usize = 32;
 
-/// `0x140940` / `0x140944`: the vehicle moby and its class. Written only by the ship classes (G-LVL-009), none of which
-/// the port has: no vehicle.
-fn vehicle(_w: &World) -> Option<(MobyId, i16)> { None }
+/// `0x140940` / `0x140944`: the vehicle moby and its class (the ridden-vehicle record, [`crate::vehicle::Record`]).
+fn vehicle(w: &World) -> Option<(MobyId, i16)> { w.svc.vehicle.moby.filter(|&v| v < w.table.mobys.len()).map(|v| (v, w.svc.vehicle.class)) }
 
 /// The gate of state 1 (module doc): true while he flies a live ship of class 0x45.
 fn in_ship(w: &World) -> bool {
@@ -89,5 +88,44 @@ pub fn update(w: &mut World, id: MobyId) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::moby_runtime::{Moby, MobyTable};
+    use crate::moby_update::services::pvar as p;
+    use rc_formats::volumes::{Shape, Volumes};
+
+    /// Ratchet inside a fall cuboid: the death fall on foot; nothing while he flies Gemlik's ship (class 0x45, the
+    /// ridden-vehicle record), as in its battle outside the base.
+    fn fall_called(mounted: bool) -> bool {
+        let mut kv = Moby { o_class: 1039, pvars: vec![0; 8 * PER_LIST], ..Moby::default() };
+        for k in 0..2 * PER_LIST { p::set_i32(&mut kv.pvars, 4 * k, -1); }
+        p::set_i32(&mut kv.pvars, 0, 0);
+        let ship = Moby { o_class: SHIP_CLASS, state: 1, ..Moby::default() };
+        let mut t = MobyTable::new(vec![kv, ship], 4);
+        let mut hero = crate::hero::Hero::new();
+        if mounted { hero.state = MOUNTED; }
+        let mut rng = crate::rng::Rng::new();
+        let classes = crate::moby_update::ClassTable::default();
+        let mut svc = crate::moby_update::Services::new();
+        let pos = hero.pos.map(|x| f32::from_bits(x.0));
+        let c = Shape { matrix: [[4.0, 0.0, 0.0, 0.0], [0.0, 4.0, 0.0, 0.0], [0.0, 0.0, 4.0, 0.0], [pos[0], pos[1], pos[2], 1.0]], ..Shape::default() };
+        svc.volumes = std::sync::Arc::new(Volumes { cuboids: vec![c], ..Default::default() });
+        if mounted { svc.vehicle.take(1, SHIP_CLASS, &crate::vehicle::Mount { missiles: 0, missiles_max: 0, b48: 0, b49: 0, b4a: 0, b4b: 0, health: 1.0, health_max: 1.0, f54: 0.0, b5e: 0 }); }
+        {
+            let mut w = World::new(&mut t, &hero, &mut rng, &classes, &mut svc, 0);
+            update(&mut w, 0);
+            update(&mut w, 0);
+        }
+        svc.hero_writes.is_some_and(|(_, f)| f.calls.iter().flatten().any(|c| matches!(c, HeroCall::SetState { id: DEATH_FALL, .. })))
+    }
+
+    #[test]
+    fn off_while_flying_the_ship() {
+        assert!(fall_called(false), "on foot: the death fall");
+        assert!(!fall_called(true), "in the ship: nothing");
     }
 }

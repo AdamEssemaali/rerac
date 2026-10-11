@@ -41,9 +41,9 @@
 //! +0xbc = 0, +0x72 = 0, the position, velocity, scale, maker, "a piece", cool-down `ticks(30)`, splits, collision
 //! off, the spin and rotation draws of state 3, `MobyBuildMatrix`, Ratchet's light (`FUN_00272078`).
 //!
-//! **Not modelled**: the idle gate's second half, the moby at 0x140940 (Ratchet's hand-item / vehicle moby) being
-//! class 0x45: the port has no such moby, so the rocks stay idle (G-HERO-002: state 0x32). The explosion's debris
-//! burst (`param_16`) is counted, not spawned (`fx::beam_explosion`).
+//! The idle gate's second half reads the moby at 0x140940 (the ridden-vehicle record, [`crate::vehicle::Record`]): Gemlik's
+//! ship 69 is class 0x45. **Not modelled**: the explosion's debris burst (`param_16`) is counted, not spawned
+//! (`fx::beam_explosion`).
 
 #![allow(clippy::needless_range_loop, clippy::manual_clamp)] // lane loops; the game's two compares keep a NaN (no clamp).
 
@@ -80,8 +80,8 @@ pub const HI: f32 = 1003.0;
 pub const WAKE_STATE: i32 = 0x32;
 pub const WAKE_CLASS: i16 = 0x45;
 
-/// `0x140940`'s class (Ratchet's hand-item / vehicle moby): not modelled by the port (module doc).
-fn wake_moby_class(_w: &World) -> Option<i16> { None }
+/// `0x140940`'s class (the ridden-vehicle record's moby).
+fn wake_moby_class(w: &World) -> Option<i16> { w.svc.vehicle.moby.filter(|&v| v < w.table.mobys.len()).map(|v| w.m(v).o_class) }
 
 /// Level13 0x2e1638 (module doc).
 pub fn update(w: &mut World, id: MobyId) {
