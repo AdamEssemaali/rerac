@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.2-alpha
+
+Fixes from playing v0.3.1.
+
+- Windows: the black window on some PCs is fixed.
+- Gold weapons look gold, in Ratchet's hand, in the menus and in the cutscene that now plays after buying one.
+- Ratchet gets darker indoors, like in Veldin's garage, and so do his weapon and Clank.
+- Ratchet glares at enemies, and makes faces when hurt, holding his breath or pulling out a big weapon.
+- Things that should stand on the ground no longer float: Qwark at Oltanis's Gadgetron stand, Umbris's Hydrodisplacer spots and more.
+- Oltanis: the round tilting platforms are solid again.
+- Kalebo III: the lifts go all the way up and down.
+- Gemlik Base: Ratchet no longer dies outside the base during the space battle, and the asteroids drift.
+- Umbris: the turrets fire from their guns.
+- The map: Ratchet's arrow turns the right way, the markers are in the right places, and the map no longer goes blank after skipping a cutscene.
+- The oxygen meter no longer shows up after drowning.
+- Options: the pages keep their layout after leaving Port Options, which now scrolls.
+
 ## v0.3.1-alpha
 
 Fixes from playing v0.3.0, smoother frame pacing, and new graphics options.
