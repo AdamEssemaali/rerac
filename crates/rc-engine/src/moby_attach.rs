@@ -602,8 +602,10 @@ fn update(attach: Option<ResMut<MobyAttach>>, anim: Option<Res<MobyAnim>>, level
         // when it comes into the hand). [L] The game decides it at that load and skips the class it loaded last; the
         // flags are followed here as they are.
         let gold = |o: i16| play.as_ref().is_some_and(|p| p.game.item_data.as_ref().is_some_and(|d| d.gold_class(&p.game.hero.weapons.gold, o as i32)));
+        // `0x2486c0`'s exception: the wrench (0x140408 = 8) off the hand (its moby's state ≠ 0) in game mode 0.
+        let wrench = play.as_ref().is_some_and(|p| p.game.hero.items.slot.id == rc_game::inventory::item::WRENCH && p.svc.game_mode == 0);
         for item in a.items.iter_mut().filter(|i| i.attach.slot == Slot::Hand) {
-            item.visible = hand_shows(item.o_class, h.as_ref(), fp, hand_off);
+            item.visible = hand_shows(item.o_class, h.as_ref(), fp, wrench, hand_off);
             item.gold = gold(item.o_class);
             if let Some(m) = h.as_ref().filter(|m| m.o_class == item.o_class) {
                 item.state = m.anim;
@@ -628,10 +630,11 @@ fn update(attach: Option<ResMut<MobyAttach>>, anim: Option<Res<MobyAnim>>, level
 }
 
 /// Whether the hand entity set of class `o_class` shows: only the class of the slot's item moby (the game has no
-/// other hand moby), hidden in first person (`0x2486c0`) unless the item is off the hand (the thrown wrench,
-/// `mstate` ≠ 0) and while `FUN_002487a8` hides the hand item (`rc_game::hero::Hero::hand_hidden`).
-pub(crate) fn hand_shows(o_class: i16, held: Option<&rc_game::hero::items::HandItem>, fp: bool, hand_off: bool) -> bool {
-    held.is_some_and(|m| m.o_class == o_class && (!fp || m.mstate != 0) && !hand_off)
+/// other hand moby), hidden in first person (`0x2486c0`) unless the item is the wrench (`wrench`: 0x140408 = 8 in game
+/// mode 0) off the hand (thrown: `mstate` ≠ 0), and while `FUN_002487a8` hides the hand item
+/// (`rc_game::hero::Hero::hand_hidden`).
+pub(crate) fn hand_shows(o_class: i16, held: Option<&rc_game::hero::items::HandItem>, fp: bool, wrench: bool, hand_off: bool) -> bool {
+    held.is_some_and(|m| m.o_class == o_class && (!fp || (wrench && m.mstate != 0)) && !hand_off)
 }
 
 /// Palettes and records of the items after a tick, and the entities' transforms (blended-pass sorting).
@@ -828,15 +831,20 @@ mod tests {
         let classes: [i16; 21] = [71, 157, 163, 168, 175, 176, 177, 180, 185, 188, 190, 192, 208, 229, 454, 483, 562, 585, 619, 849, 1251];
         for &c in &classes {
             let m = held(c);
-            let shown: Vec<i16> = classes.iter().copied().filter(|&k| hand_shows(k, Some(&m), false, false)).collect();
+            let shown: Vec<i16> = classes.iter().copied().filter(|&k| hand_shows(k, Some(&m), false, false, false)).collect();
             assert_eq!(shown, vec![c]);
-            assert!(!classes.iter().any(|&k| hand_shows(k, Some(&m), true, false) || hand_shows(k, Some(&m), false, true)));
+            assert!(!classes.iter().any(|&k| hand_shows(k, Some(&m), true, false, false) || hand_shows(k, Some(&m), false, false, true)));
         }
-        assert!(!classes.iter().any(|&k| hand_shows(k, None, false, false)));
-        // The thrown wrench stays drawn in first person.
+        assert!(!classes.iter().any(|&k| hand_shows(k, None, false, false, false)));
+        // The thrown wrench stays drawn in first person; any other item with a state of its own does not (a glove
+        // holding its next shot).
         let mut w = held(71);
         w.mstate = 10;
-        assert!(hand_shows(71, Some(&w), true, false));
+        assert!(hand_shows(71, Some(&w), true, true, false));
+        assert!(!hand_shows(71, Some(&w), true, false, false));
+        let mut g = held(192);
+        g.mstate = 1;
+        assert!(!hand_shows(192, Some(&g), true, false, false));
     }
 
     /// A swap (Bomb Glove 192 → Hologuise / Drone 483 → Pyrocitor 176 → wrench 71), then the vendor's or a scene's
@@ -848,7 +856,7 @@ mod tests {
         let ents: Vec<Vec<Entity>> = (0..4u32).map(|k| (0..3).map(|j| Entity::from_raw_u32(1 + 3 * k + j).unwrap()).collect()).collect();
         for step in [Some(192i16), None, Some(483), None, Some(176), Some(71)] {
             let m = step.map(held);
-            let visible: Vec<bool> = classes.iter().map(|&c| hand_shows(c, m.as_ref(), false, false)).collect();
+            let visible: Vec<bool> = classes.iter().map(|&c| hand_shows(c, m.as_ref(), false, false, false)).collect();
             // Every entity shown (the vendor exit / scene end), then the hide pass.
             let mut shown: std::collections::HashSet<Entity> = ents.iter().flatten().copied().collect();
             for e in absent_entities(visible.iter().copied().zip(ents.iter().map(|v| v.as_slice()))) { shown.remove(&e); }
