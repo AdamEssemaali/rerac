@@ -815,11 +815,28 @@ impl Camera {
         // UpdateAllCameras 0x20d620: the active camera's own check (the first-person camera's release 0x316c08), the
         // other camera's activation (the first-person check 0x316880; the follow camera takes over from a released
         // one), the switch `0x20d110` with the new type's init, then the active type's update.
-        // The script camera (type 5) never yields to an activation check; `CameraScript2` releases it (script.rs).
-        // The type-6 camera (the missile view) likewise holds until its hand-back `0x317e70` (type6.rs).
-        // With another camera current the loop's checks still run (class 17's regions see it and leave).
-        if !self.follow_is_current() && !self.swing.active && !self.class_cam.active { self.activation_loop(inp); }
-        let prev = if self.type6.active {
+        // With another camera current the loop's checks still run (class 17's regions see it and leave). The script
+        // camera (type 5) is released by `CameraScript2` (script.rs), or switched away from by a winner of the loop as
+        // `0x20d620` switches any (an armed fly-by, class 19: its check passes against every other class; Qwark's crash
+        // camera over Gemlik's ship). The type-6 camera (the missile view) holds until its hand-back `0x317e70`.
+        let mut switched = None;
+        if !self.follow_is_current() && !self.swing.active && !self.class_cam.active {
+            let won = self.activation_loop(inp);
+            if self.script.active && !self.type6.active {
+                if let (Some(c), Some(slot)) = (won, self.level_cams.won_slot) {
+                    if self.level_cams.ports.runs_class_cam(c) {
+                        let p = self.script_view();
+                        self.script.active = false;
+                        self.script.release = None;
+                        self.class_switch_in(inp, c, slot, p);
+                        switched = Some(p);
+                    }
+                }
+            }
+        }
+        let prev = if switched.is_some() {
+            switched
+        } else if self.type6.active {
             self.type6_frame(inp)
         } else if self.script.active {
             self.script_frame(inp)
