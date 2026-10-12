@@ -631,7 +631,7 @@ pub struct Play {
     /// [`show_reloaded`].
     reload_shown: Vec<usize>,
     /// The weapon arm layers' joints (Ratchet's joint lists 12 / 13, `rc_game::hero::weapons::ARM_LISTS`).
-    arm_joints: [Vec<u8>; 2],
+    layer_joints: [Vec<u8>; 3],
     /// The help voice line loaded for the dialogue player (rc_game::help::VoiceCmd::Load), played on its `Play`.
     help_vag: Option<std::sync::Arc<[u8]>>,
     /// `RC_HUD_HELP=<id>`: the help message forced at the first tick (dev switch; the first-input gate skipped).
@@ -1191,11 +1191,11 @@ fn setup(
     let mut game = Game::new(coll, table, hero_id, options, lv.death_z);
     if let Some(s) = &session { game.hero.health = s.0.hp; }
     // The hand items (wrench, bomb glove, …): created by the hero update from the first tick on.
-    let mut arm_joints: [Vec<u8>; 2] = Default::default();
+    let mut layer_joints: [Vec<u8>; 3] = Default::default();
     let item_data = match item_data(lv) {
         Ok((d, ammo, weapon_defs, seconds, firsts, item_targets)) => {
             game.hero.set_item_joint_targets(item_targets);
-            arm_joints = rc_game::hero::weapons::ARM_LISTS.map(|l| seconds.get(l as usize).cloned().unwrap_or_default());
+            layer_joints = rc_game::hero::anim::LAYER_LISTS.map(|l| seconds.get(l as usize).cloned().unwrap_or_default());
             game.hero.set_joint_targets(&seconds);
             game.hero.set_joint_chains(firsts);
             // The back packs' joint lists and class scales (the Hydro-Pack's jets: rc_game::hero::fx::pack_point).
@@ -1221,7 +1221,7 @@ fn setup(
     game.item_data = item_data.clone();
     commands.insert_resource(HeldWeapon::default());
     let mut ratchet = RatchetAnim::new(class);
-    ratchet.arm_joints = arm_joints.clone();
+    ratchet.layer_joints = layer_joints.clone();
     // The glove-holding layers' classes 1 / 2 (rc_game::hero::weapons::hold_update).
     ratchet.hold = hold_classes();
     let mirror_anim = opts.is_some_and(|o| o.mirror_anim);
@@ -1534,7 +1534,7 @@ fn setup(
         noclip: None,
         ratchet_late: None,
         reload_shown: Vec::new(),
-        arm_joints,
+        layer_joints,
         help_vag: None,
         help_debug: std::env::var("RC_HUD_HELP").ok().and_then(|v| v.trim().parse().ok()),
         debug_hits: std::env::var("RC_DEBUG_HIT").ok().map(|v| {
@@ -2073,7 +2073,7 @@ fn respawn(p: &mut Play, coll: &rc_formats::collision::Collision, class: &MobyAn
     }
     let hold = std::mem::take(&mut p.ratchet.hold);
     p.ratchet = RatchetAnim::new(class);
-    p.ratchet.arm_joints = p.arm_joints.clone();
+    p.ratchet.layer_joints = p.layer_joints.clone();
     p.ratchet.hold = hold;
     p.ratchet.mirror = p.mirror_anim;
     p.frozen_hint = false;
@@ -2541,7 +2541,7 @@ fn upload(
     // His pose with the weapon arm's pose layers (rc_game::hero::weapons, the moby +0x60 list) and his joint
     // modifiers (head look, lean, eyelids: the moby +0x64 list, rc_game::hero::idle) over it.
     let hm = &p.game.mobys.mobys[p.hero_id];
-    let layers = rc_game::hero::anim::pose_layers_with(&p.game.hero.weapons.layers, &p.arm_joints, &p.ratchet.hold);
+    let layers = rc_game::hero::anim::pose_layers_with(&p.game.hero.weapons.layers, &p.layer_joints, &p.ratchet.hold);
     let f = moby_anim::evaluate_posed(class, &p.ratchet.state, p.ratchet.snapshot.as_ref(), &layers, &hm.joint_mods);
     for (k, b) in f.iter().take(p.slots as usize).flat_map(|r| r.iter().flatten().flat_map(|v| v.to_le_bytes())).enumerate() { palette[k] = b; }
     let rows = rows_bits(&hm.rows);

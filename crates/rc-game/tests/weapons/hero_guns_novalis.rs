@@ -275,7 +275,7 @@ fn run_swaps(lv: &Lv, s: &Setup, input: &dyn Fn(u32) -> PadInput, ticks: u32, ho
     }
     game.finish_load();
     let mut anim = RatchetAnim::new(&lv.ratchet);
-    anim.arm_joints = rc_game::hero::weapons::ARM_LISTS.map(|l| lv.seconds[l as usize].clone());
+    anim.layer_joints = rc_game::hero::anim::LAYER_LISTS.map(|l| lv.seconds[l as usize].clone());
     if hold { anim.hold = lv.hold.clone(); }
     let svc_cell = std::cell::RefCell::new(&mut svc);
     let parts_cell = std::cell::RefCell::new(&mut particles);

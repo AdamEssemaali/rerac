@@ -34,7 +34,7 @@ struct Lv {
     death_z: f32,
     coll_blobs: Vec<(i32, rc_formats::moby_collision::MobyCollision)>,
     ratchet: MobyAnimClass,
-    arm_joints: [Vec<u8>; 2],
+    arm_joints: [Vec<u8>; 3],
     items: ItemData,
 }
 
@@ -75,7 +75,7 @@ fn load() -> Option<Lv> {
         .map(|i| rc_formats::test_data::core_block(1, &format!("ratchet_seq/{i:03}")).and_then(|b| parse_sequence(&b, 0).ok()))
         .collect();
     let ratchet = MobyAnimClass::new(&class, seqs);
-    let arm_joints = rc_game::hero::weapons::ARM_LISTS.map(|l| gadget::joint_list(&ratchet_blob, &class.header, l as usize).map(|(_, b)| b).unwrap_or_default());
+    let arm_joints = rc_game::hero::anim::LAYER_LISTS.map(|l| gadget::joint_list(&ratchet_blob, &class.header, l as usize).map(|(_, b)| b).unwrap_or_default());
     let mut defs = vec![ItemDef::default(); 37];
     defs[8] = ItemDef { slot: 0, attach: 0, o_class: 71, b18: 0 };
     defs[10] = ItemDef { slot: 0, attach: 6, o_class: 192, b18: 0 };
@@ -213,7 +213,7 @@ fn run(lv: &Lv, s: &Setup, input: &dyn Fn(u32) -> PadInput, ticks: u32) -> (Vec<
     }
     game.finish_load();
     let mut anim = RatchetAnim::new(&lv.ratchet);
-    anim.arm_joints = lv.arm_joints.clone();
+    anim.layer_joints = lv.arm_joints.clone();
     let svc_cell = std::cell::RefCell::new(&mut svc);
     let parts_cell = std::cell::RefCell::new(&mut particles);
     let mut rows = Vec::new();

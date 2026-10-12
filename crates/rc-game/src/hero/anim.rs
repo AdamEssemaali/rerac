@@ -159,9 +159,14 @@ pub struct AnimLayer {
     pub born: u32,
 }
 
-/// Ratchet's pose-layer nodes (the moby's +0x60 list): 0x140058 / 0x14005c (the weapon arm, lists 12 / 13) and
-/// 0x140050 / 0x140054 (the glove-holding layers, lists 12 / 13).
-pub type PoseNodes = [Option<AnimLayer>; 4];
+/// Ratchet's pose-layer nodes (the moby's +0x60 list): 0x140058 / 0x14005c (the weapon arm, lists 12 / 13),
+/// 0x140050 / 0x140054 (the glove-holding layers, lists 12 / 13) and 0x140060 (the face, list 0x18:
+/// `crate::hero::weapons::face_update`).
+pub type PoseNodes = [Option<AnimLayer>; 5];
+
+/// The joint lists the pose layers run on, in the order of the `joints` argument of [`pose_layers_with`]: the arms
+/// (12, 13) and the face (0x18).
+pub const LAYER_LISTS: [u8; 3] = [12, 13, 0x18];
 
 /// An animation-only class a pose layer reads its keys from (`FUN_00264220`): Ratchet's classes 1 and 2, the
 /// glove-holding versions of his first 0x17 sequences (the same keys and key times) for his right arm (joints 52..71,
@@ -191,18 +196,17 @@ pub const HOLD_SEQS: u8 = 0x17;
 
 /// The evaluator's view of the weapon-arm layers (`rc_formats::moby_anim::PoseLayer`) over their joints (without
 /// the retarget classes: the glove-holding layers are left out; [`pose_layers_with`] has them).
-pub fn pose_layers<'a>(layers: &PoseNodes, joints: &'a [Vec<u8>; 2]) -> Vec<rc_formats::moby_anim::PoseLayer<'a>> { pose_layers_with(layers, joints, &[None, None]) }
+pub fn pose_layers<'a>(layers: &PoseNodes, joints: &'a [Vec<u8>; 3]) -> Vec<rc_formats::moby_anim::PoseLayer<'a>> { pose_layers_with(layers, joints, &[None, None]) }
 
 /// The evaluator's view of all of Ratchet's pose layers, in the +0x60 list's order (the newest node first): each over
-/// its list's joints (`joints[0]` list 12, `joints[1]` list 13); a glove-holding layer's keys below [`HOLD_SEQS`] from
+/// its list's joints (`joints[k]` for list [`LAYER_LISTS`]`[k]`); a glove-holding layer's keys below [`HOLD_SEQS`] from
 /// its retarget class (a layer whose class is missing is left out).
-pub fn pose_layers_with<'a>(layers: &PoseNodes, joints: &'a [Vec<u8>; 2], hold: &'a [Option<std::sync::Arc<HoldClass>>; 2]) -> Vec<rc_formats::moby_anim::PoseLayer<'a>> {
+pub fn pose_layers_with<'a>(layers: &PoseNodes, joints: &'a [Vec<u8>; 3], hold: &'a [Option<std::sync::Arc<HoldClass>>; 2]) -> Vec<rc_formats::moby_anim::PoseLayer<'a>> {
     let mut v: Vec<(u32, rc_formats::moby_anim::PoseLayer<'a>)> = layers
         .iter()
-        .enumerate()
-        .filter_map(|(i, l)| {
+        .filter_map(|l| {
             let l = l.as_ref()?;
-            let j = &joints[i % 2];
+            let j = &joints[LAYER_LISTS.iter().position(|&k| k == l.list)?];
             if j.is_empty() { return None; }
             let alt = match l.alt {
                 0 => None,
@@ -352,9 +356,9 @@ pub struct RatchetAnim {
     /// as infinity): the next advance completes the key step at once and continues with `t = speed · rate` of the
     /// new key. Reproduced as that result (docs/plan/hardware_fidelity_layers.md), not as an infinite rate.
     pub jump: bool,
-    /// The joints of the weapon arm's pose layers (the second byte lists of Ratchet's class joint lists 12 / 13,
-    /// `crate::hero::weapons::ARM_LISTS`), set by the loader; empty: layers are not evaluated.
-    pub arm_joints: [Vec<u8>; 2],
+    /// The joints of the pose layers' lists (the second byte lists of Ratchet's class joint lists [`LAYER_LISTS`]: the
+    /// arms 12 / 13, the face 0x18), set by the loader; empty: those layers are not evaluated.
+    pub layer_joints: [Vec<u8>; 3],
     /// The glove-holding layers' retarget classes 1 / 2 ([`HoldClass`]), set by the loader; None: those layers are
     /// not evaluated.
     pub hold: [Option<std::sync::Arc<HoldClass>>; 2],
@@ -363,7 +367,7 @@ pub struct RatchetAnim {
 impl RatchetAnim {
     /// Spawned on sequence 0 frame 0 (what `InitMobyInstance` leaves).
     pub fn new(class: &MobyAnimClass) -> RatchetAnim {
-        RatchetAnim { state: AnimState::spawn(class), snapshot: None, rate: Pf::ONE, flags: 0, curve: -1, curve_pos: 0, frame: Pf::ZERO, frame_step: Pf::ZERO, loop_range: None, mirror: false, loop_end: 0, exit: false, jump: false, arm_joints: Default::default(), hold: Default::default() }
+        RatchetAnim { state: AnimState::spawn(class), snapshot: None, rate: Pf::ONE, flags: 0, curve: -1, curve_pos: 0, frame: Pf::ZERO, frame_step: Pf::ZERO, loop_range: None, mirror: false, loop_end: 0, exit: false, jump: false, layer_joints: Default::default(), hold: Default::default() }
     }
 
     /// Bind to Ratchet's class for one tick of hero code.
@@ -434,7 +438,7 @@ impl RatchetAnimRef<'_> {
     }
 
     pub fn eval_chains_with(&self, chains: &[&[u8]], layers: &PoseNodes, mods: &[rc_formats::moby_anim::JointModifier]) -> Vec<rc_formats::moby_anim::Rows> {
-        let pl = pose_layers_with(layers, &self.a.arm_joints, &self.a.hold);
+        let pl = pose_layers_with(layers, &self.a.layer_joints, &self.a.hold);
         rc_formats::moby_anim::evaluate_chains_posed(self.class, &self.a.state, self.a.snapshot.as_ref(), chains, &pl, mods)
     }
 
@@ -500,7 +504,7 @@ impl AnimCtl for HeroAnimCtl<'_> {
     fn eval_chains(&self, chains: &[&[u8]]) -> Vec<rc_formats::moby_anim::Rows> { self.r().eval_chains(chains) }
     fn eval_chains_with(&self, chains: &[&[u8]], layers: &PoseNodes, mods: &[rc_formats::moby_anim::JointModifier]) -> Vec<rc_formats::moby_anim::Rows> {
         // The weapon-arm layers are Ratchet's (his +0x60 list); a body moby has none.
-        if self.body_class().is_some() { return self.r().eval_chains_with(chains, &[None, None, None, None], mods); }
+        if self.body_class().is_some() { return self.r().eval_chains_with(chains, &[None; 5], mods); }
         self.r().eval_chains_with(chains, layers, mods)
     }
     fn pose_frame(&self) -> Option<rc_formats::moby_anim::MobyFrame> { self.r().pose_frame() }

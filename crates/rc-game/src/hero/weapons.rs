@@ -162,7 +162,7 @@ pub struct Weapons {
 impl Default for Weapons {
     fn default() -> Self {
         Weapons {
-            ammo: [0; N], uses_ammo: [false; N], used: [0; N], picked: [0; N], glove: Glove::default(), layers: [None; 4], nodes_made: 0, layer_fade: 0, layer_seq: 0,
+            ammo: [0; N], uses_ammo: [false; N], used: [0; N], picked: [0; N], glove: Glove::default(), layers: [None; 5], nodes_made: 0, layer_fade: 0, layer_seq: 0,
             arm_item: 0, deferred: None, throws: 0, defs: Vec::new(), gold: [0; N], pyro: Default::default(), pending_draw: false, pending_idle: false,
             aim: None, aim_pos: [0.0; 3], blaster: Default::default(), ryno: Default::default(), devastator: Default::default(), tesla: Default::default(), pending_anim: None, markers: Default::default(), reactive: Default::default(), visibomb: Default::default(),
         }
@@ -233,6 +233,87 @@ fn new_node(h: &mut Hero, list: u8) -> AnimLayer {
 
 /// The glove-holding layers' slots in [`Weapons::layers`] (0x140050 / 0x140054).
 pub const HOLD: usize = 2;
+/// The face layer's slot in [`Weapons::layers`] (0x140060, [`face_update`]).
+pub const FACE: usize = 4;
+/// Ratchet's joint list of the face layer.
+pub const FACE_LIST: u8 = 0x18;
+
+/// `0x22e350(kind)`: a face byte (the look target's record +0x3c, 0x14161e) as Ratchet's face sequence: 1 → 0x79,
+/// 2 → 0x77, 3 → 0x75, any other → 0.
+fn face_seq(kind: i32) -> u8 {
+    match kind {
+        1 => 0x79,
+        2 => 0x77,
+        3 => 0x75,
+        _ => 0,
+    }
+}
+
+/// **The face layer** `0x22e3a8` (last in the items' upkeep `0x22f390`, after `0x22f068`): a pose layer on Ratchet's
+/// joint list 0x18 (his face) plays one of his face sequences while one of these holds, the later winning:
+/// * the head has a look target (0x1415c4, [`super::pose`]'s `HeroScanTargets`: an enemy in range ahead): sequence
+///   0x79 (the glare), or the one of the target record's byte +0x3c when it is set ([`face_seq`]; weight 0.7 then in
+///   group 1);
+/// * the swap timer 0x13f52c runs (set with 0x14161e = 3 for 70 ticks when the Suck Cannon, Devastator, Visibomb,
+///   Pyrocitor or R.Y.N.O. comes into the hand, `0x2306c0`): the sequence of 0x14161e;
+/// * one hit point left (0x1415f8 = 1): 0x7b at 0.8, but not wanted on his sequences 0x54 / 0x82 / 0x5a unless he
+///   is blending;
+/// * under water (group 0x11) without the O2 Mask: 0x78, weight `min(1, 1.25 − air / 10000)`;
+/// * the Blaster, the Pyrocitor or the Tesla Claw ready (15 / 16 / 19) with the weapon out (0x1413f8): 0x76 at 0.8.
+///
+/// Wanted: the node is made (weight 0) if missing, its weight approaches the target by 0.05 a tick (`0x270728`), and
+/// it plays the sequence (a new one from frame 0 over `ticks(8)` with one step at once, `FUN_002641c0`; the same one
+/// advanced, `FUN_00263f70`). Not wanted: the weight goes to 0 by 0.05 a tick, the node freed at 0 (no advance).
+pub fn face_update(h: &mut Hero, anim: &dyn AnimCtl, table: &MobyTable) {
+    let mut seq = 0u8;
+    let mut weight = 1.0f32;
+    let mut want = false;
+    if h.idle.look_target != 0 {
+        want = true;
+        seq = 0x79;
+        let kind = table.mobys.get(h.idle.look_target as usize - 1).and_then(|m| Some(*m.pvars.get(crate::targeting::record(m)? + 0x3c)?));
+        if let Some(k) = kind.filter(|&k| k != 0) {
+            seq = face_seq(k as i8 as i32);
+            if h.group == 1 { weight = 0.7; }
+        }
+    }
+    if h.items.f52c != 0 {
+        want = true;
+        seq = face_seq(h.items.f161e as i32);
+    }
+    if h.health == 1 {
+        want = true;
+        let v = anim.view();
+        if matches!(v.seq_b, 0x54 | 0x82 | 0x5a) && !v.blending() { want = false; }
+        weight = 0.8;
+        seq = 0x7b;
+    }
+    if h.group == 0x11 && !h.owned.has(super::swim::ITEM_O2_MASK) {
+        want = true;
+        seq = 0x78;
+        weight = ((1.0 - h.swim.oxygen as f32 / 10000.0) + 0.25).min(1.0);
+    }
+    let ready = h.items.ready_item().map_or(-1, |_| h.items.slot.id);
+    if matches!(ready, 15 | 16 | 19) && h.f13f8 != 0 {
+        weight = 0.8;
+        want = true;
+        seq = 0x76;
+    }
+    if want {
+        if h.weapons.layers[FACE].is_none() {
+            let l = new_node(h, FACE_LIST);
+            h.weapons.layers[FACE] = Some(AnimLayer { weight: 0.0, ..l });
+        }
+    } else {
+        let Some(l) = h.weapons.layers[FACE].as_mut() else { return };
+        approach_f(&mut l.weight, 0.0, 0.05);
+        if l.weight == 0.0 { h.weapons.layers[FACE] = None; }
+        return;
+    }
+    let Some(l) = h.weapons.layers[FACE].as_mut() else { return };
+    approach_f(&mut l.weight, weight, 0.05);
+    if l.seq_b == seq { l.advance(anim); } else { l.start(anim, seq, 0, ticks(8), true); }
+}
 
 /// What the hand swap `UpdateWrenchSelected` 0x2307e0 does to the weapons when it commits a change (before the item's
 /// blend to its sequence 2 and slot state 3): a weapon out is put away (0x1413f8 → `0x22efd8`), and both glove-holding
@@ -241,7 +322,7 @@ pub const HOLD: usize = 2;
 /// wants it would hold its weight: `0x22e660` fades an unwanted node and then, in its common tail, brings it back to 1.
 pub fn swap_commit(h: &mut Hero) {
     if h.f13f8 != 0 { put_away(h); }
-    for l in h.weapons.layers[HOLD..].iter_mut().flatten() { l.kill = true; }
+    for l in h.weapons.layers[HOLD..FACE].iter_mut().flatten() { l.kill = true; }
 }
 
 /// `0x22df10(seq)`: Ratchet's key-B sequences in which the glove-holding layers leave his arms to a fixed pose (the
@@ -671,6 +752,30 @@ mod tests {
         assert!((v[2] - g * n * 0.5).abs() < 1e-6, "{v:?}");
     }
 
+    /// `0x22e3a8`: one hit point left brings the face layer (sequence 0x7b) in by 0.05 a tick up to 0.8; healed, it
+    /// fades out by 0.05 a tick and is freed; under water without the O2 Mask the weight follows the air left.
+    #[test]
+    fn face_layer() {
+        let (mut r, _) = runner(3);
+        let table = MobyTable::default();
+        r.hero.health = 1;
+        face_update(&mut r.hero, &r.anim, &table);
+        let l = r.hero.weapons.layers[FACE].expect("made");
+        assert_eq!((l.list, l.seq_b, l.weight), (FACE_LIST, 0x7b, 0.05));
+        for _ in 0..30 { face_update(&mut r.hero, &r.anim, &table); }
+        assert!((r.hero.weapons.layers[FACE].unwrap().weight - 0.8).abs() < 1e-5);
+        r.hero.health = 4;
+        for _ in 0..15 { face_update(&mut r.hero, &r.anim, &table); }
+        assert!(r.hero.weapons.layers[FACE].is_some(), "still fading");
+        for _ in 0..2 { face_update(&mut r.hero, &r.anim, &table); }
+        assert!(r.hero.weapons.layers[FACE].is_none(), "freed at 0");
+        (r.hero.group, r.hero.swim.oxygen) = (0x11, 10000);
+        for _ in 0..30 { face_update(&mut r.hero, &r.anim, &table); }
+        let l = r.hero.weapons.layers[FACE].unwrap();
+        assert_eq!(l.seq_b, 0x78);
+        assert!((l.weight - 0.25).abs() < 1e-5, "full air: 0.25");
+    }
+
     #[test]
     fn ammo() {
         let mut w = Weapons::default();
@@ -727,22 +832,22 @@ mod tests {
         r.anim.set_anim(Pf::ONE, 3, 0);
         r.anim.advance(Pf::ONE);
         for (b18, n) in [(2u8, 2), (1, 1), (0, 0)] {
-            r.hero.weapons.layers = [None; 4];
+            r.hero.weapons.layers = [None; 5];
             r.hero.items.f13fb = b18;
             hold_update(&mut r.hero, &r.anim);
-            let made: Vec<_> = r.hero.weapons.layers[HOLD..].iter().flatten().collect();
+            let made: Vec<_> = r.hero.weapons.layers[HOLD..FACE].iter().flatten().collect();
             assert_eq!(made.len(), n, "0x1413fb = {b18}");
             assert!(made.iter().all(|l| (l.weight - 0.1).abs() < 1e-6 && l.seq_b == 3 && l.alt as usize >= 1), "{made:?}");
         }
-        r.hero.weapons.layers = [None; 4];
+        r.hero.weapons.layers = [None; 5];
         r.hero.items.f13fb = 2;
         for _ in 0..12 { hold_update(&mut r.hero, &r.anim); }
-        assert!(r.hero.weapons.layers[HOLD..].iter().all(|l| l.is_some_and(|l| l.weight == 1.0 && l.list == ARM_LISTS[l.alt as usize - 1])));
+        assert!(r.hero.weapons.layers[HOLD..FACE].iter().all(|l| l.is_some_and(|l| l.weight == 1.0 && l.list == ARM_LISTS[l.alt as usize - 1])));
         // The arm layer out and playing: the holding layers give way.
         r.hero.weapons.layers[0] = Some(AnimLayer::new(12));
         r.hero.weapons.layer_fade = 0;
         for _ in 0..12 { hold_update(&mut r.hero, &r.anim); }
-        assert!(r.hero.weapons.layers[HOLD..].iter().all(|l| l.is_some_and(|l| l.weight == 0.0)), "under the arm: weight 0");
+        assert!(r.hero.weapons.layers[HOLD..FACE].iter().all(|l| l.is_some_and(|l| l.weight == 0.0)), "under the arm: weight 0");
         r.hero.weapons.layer_fade = 1;
         for _ in 0..12 { hold_update(&mut r.hero, &r.anim); }
         assert!(r.hero.weapons.layers[HOLD].is_some_and(|l| l.weight == 1.0), "the arm fading: back to 1");
@@ -756,7 +861,7 @@ mod tests {
         // The hand hidden (0x1413ff): faded out and freed, not remade while it stays hidden.
         r.hero.f13ff = 1;
         for _ in 0..12 { hold_update(&mut r.hero, &r.anim); }
-        assert!(r.hero.weapons.layers[HOLD..].iter().all(Option::is_none));
+        assert!(r.hero.weapons.layers[HOLD..FACE].iter().all(Option::is_none));
     }
 
     /// ○ while running: the weapon arm (0x1413f8), not the state; its timer 0x13f50c counts.

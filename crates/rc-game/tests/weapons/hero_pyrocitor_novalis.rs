@@ -238,7 +238,7 @@ fn run(lv: &Lv, at: ([f32; 3], f32), watch: usize, input: &dyn Fn(u32) -> PadInp
     }
     game.finish_load();
     let mut anim = RatchetAnim::new(&lv.ratchet);
-    anim.arm_joints = rc_game::hero::weapons::ARM_LISTS.map(|l| lv.seconds[l as usize].clone());
+    anim.layer_joints = rc_game::hero::anim::LAYER_LISTS.map(|l| lv.seconds[l as usize].clone());
     let svc_cell = std::cell::RefCell::new(&mut svc);
     let parts_cell = std::cell::RefCell::new(&mut particles);
     let mut rows = Vec::new();

@@ -289,6 +289,8 @@ pub fn items_update(hero: &mut Hero, g: &mut ItemGlobals, table: &mut MobyTable,
     // upkeep 0x22f068.
     super::weapons::hold_update(hero, anim);
     super::weapons::arm_upkeep(hero, anim);
+    // Then the face layer `0x22e3a8`.
+    super::weapons::face_update(hero, anim, table);
     apply_pending_blend(hero, env.data);
     create_hand(hero, g, env);
     attach_hand(hero, table, anim, env);
