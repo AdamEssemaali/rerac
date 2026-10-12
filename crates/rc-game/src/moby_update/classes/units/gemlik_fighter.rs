@@ -32,6 +32,7 @@ use crate::moby_runtime::{mode, MobyId};
 use crate::moby_update::creature::{self as c, damage, flash, fx, turn};
 use crate::moby_update::services::World;
 use crate::moby_update::story;
+use crate::ps2v::Pf;
 use std::f32::consts::FRAC_PI_2;
 
 pub const REFERENCE_LEVEL: u32 = 13;
@@ -177,7 +178,9 @@ fn advance(w: &mut World, id: MobyId, p: usize) -> bool {
     let s = c::pf(w, id, o::SPEED);
     let mut wrapped = false;
     let keep = if 0.0 <= l - a && s > l - a { false } else { s <= l };
-    let mut t = if keep { a / l } else { 0.0 };
+    // `div.s` (a fighter appears on its node, the last node the same: 0 / 0 is +MAX on the EE, so t clamps to 1 where an
+    // `f32` 0 / 0 made its position NaN for good).
+    let mut t = if keep { (Pf::f(a) / Pf::f(l)).to_f32() } else { 0.0 };
     if !keep {
         let cur = c::pi16(w, id, o::NODE);
         c::set_pi16(w, id, o::LAST, cur);

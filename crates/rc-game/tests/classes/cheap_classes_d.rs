@@ -414,3 +414,27 @@ fn popup_turret_rises_wakes_fires_and_blows_up() {
     let b2 = lv.table.mobys[t].spawn_id;
     assert!(b2 < 0 || lv.svc.save.death.contains(&(14, b2)), "its death bits");
 }
+
+/// Gemlik's fighters 111 in Qwark's shield phase (his command 4): every one comes out and flies with a real position.
+/// A fighter appears on its path node with the last node the same; the move's `a / l` is then 0 / 0, +MAX on the EE (it
+/// clamps to 1), where an `f32` NaN left six of the eight nowhere and Qwark's shield up for good.
+#[test]
+fn gemlik_fighters_all_fly_in_the_shield_phase() {
+    use rc_game::moby_update::classes::units::gemlik_fighter;
+    let Some(mut lv) = load(13) else { eprintln!("skipped"); return };
+    let fs = lv.of_class(111);
+    assert_eq!(fs.len(), 8);
+    let q = lv.of_class(388)[0];
+    let qp = lv.table.mobys[q].position;
+    let hero = hero_at([qp[0] - 60.0, qp[1], qp[2]]);
+    for &f in &fs { lv.run(&hero, f, gemlik_fighter::update); }
+    lv.table.mobys[q].cmd = 4;
+    for _ in 0..300 {
+        for &f in &fs { lv.run(&hero, f, gemlik_fighter::update); }
+    }
+    for &f in &fs {
+        let m = &lv.table.mobys[f];
+        assert_eq!(m.state, 2, "fighter {f} flying");
+        assert!(m.position[..3].iter().all(|x| x.is_finite()), "fighter {f} at {:?}", m.position);
+    }
+}

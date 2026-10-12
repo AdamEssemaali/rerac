@@ -781,7 +781,8 @@ fn follow(w: &mut World, id: MobyId, sel: usize, turn: bool) -> bool {
     let d_seg = dist3(point(&p, b), point(&p, a));
     let speed = pf(w, id, pvo::SPEED);
     let mut wrapped = false;
-    let mut f = d_me / d_seg;
+    // `div.s`: a zero-length segment gives +MAX (clamped to 1 below), never NaN.
+    let mut f = (crate::ps2v::Pf::f(d_me) / crate::ps2v::Pf::f(d_seg)).to_f32();
     if 0.0 <= d_seg - d_me && d_seg - d_me < speed {
         set16(w, id, pvo::BEHIND, a as i16);
         let mut n = (a + c::pu8(w, id, pvo::DIR) as i8 as i32) as i16;
