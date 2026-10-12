@@ -44,7 +44,10 @@ went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 202
   hand, in the demos and on the menu models); Ratchet and his items lit by the area he stands in (Veldin's garage);
   Ratchet's face layer (the glare at an enemy, the swap, one-hit-point, under-water and firing faces); Kalebo's lifts
   (their shafts are cylinders); Oltanis's tilting floats (solid again, tilting toward Ratchet); the HUD emptied by the
-  death reload (no oxygen meter after drowning).
+  death reload (no oxygen meter after drowning); the pause tests held while a scene or movie is about to start (the
+  blank map after Oltanis's infobot); the loader's ground snap of the rooted placements (311 on 13 levels: Qwark at
+  the PDA stand, Umbris's Hydrodisplacer spots). Confirmed in play by the user: the garage lighting, the map, Qwark,
+  the Hydrodisplacer spots, the floats.
 - **Verification:** goldens for every loader (`crates/rc-formats/tests/`, snapshot hashes); PCSX2 comparisons are made
   per question with the PINE probes (`rc-trace read / dump-ee / pine-write --pine`, `work/scratch/*_probe.py`) rather
   than with a full trace harness; the frame-exact trace comparison of M4 is still open (G-TOOL-003..012).
@@ -61,14 +64,15 @@ went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 202
    says it stays shut, unconfirmed in play), `SetMissionDone(1)` logged every tick on Blarg after the Hydrodisplacer,
    the stray antenna glow in the Hydrodisplacer pickup scene; from the play tests, not yet looked at: nanotech stuck
    after an infobot movie, ship collision, Gemlik's Magneboots wall, Eudora's infobot twice, Ratchet's head size on
-   stopping, the weapon counter's hiding (its icon: fixed 0fe5dd3), weapons visible while swimming, Umbris' Hydrodisplacer spots floating, Kerwan's taxi on the first visit, Blarg's Clank doors. Needing a
-   repro or a reference from the original: Oltanis's map going blank (the level's map state lost while the menu is
-   closed: the trigger is not found), Gaspar's metal crates without bolts (the code matches the game), Qwark floating
-   at Oltanis's PDA stand (the data and the code put him there), Rilgar's Hydrodisplacer, Pokitaru's HUD, Clank's eye
-   colour, the skies, the dark gun blast, see-through surfaces, camera features. The sound reports (teleporter
-   arrivals, Clank's Heli-Pack, glide and footsteps, Kerwan's traffic, Blarg's warship (its crash is fixed), music at the ship, the vendor and after the
-   Umbris fight) wait for a way to trace sound in a silent run. Found faithful, no change: the grind lean with the
-   camera ahead (the game picks it on screen), the O2 Mask's and the gold display props' chrome wash.
+   stopping, the weapon counter's hiding (its icon: fixed 0fe5dd3), weapons visible while swimming, Kerwan's taxi on
+   the first visit, Blarg's Clank doors, the henchman room's soft lock after a load. Needing a repro or a reference
+   from the original (the Discord list's "needs to verify"): Gaspar's metal crates without bolts (the code matches the
+   game), the weapon in the gold bolt animation, Pokitaru's freeze / soft lock / spawns, Orxon's respawn as Clank,
+   Rilgar's Hydrodisplacer, Pokitaru's HUD, Clank's eye colour, the skies, the dark gun blast, see-through surfaces,
+   camera features, the gold display props. The sound reports (teleporter arrivals, Clank's Heli-Pack, glide and
+   footsteps, Kerwan's traffic, Blarg's warship (its crash is fixed), music at the ship, the vendor and after the Umbris
+   fight) wait for a way to trace sound in a silent run (G-TOOL-022). Found faithful, no change: the grind lean with
+   the camera ahead (the game picks it on screen), the O2 Mask's chrome wash.
 4. **Fidelity rows in gaps.md**: the GS state of class draws (G-REN-036), stale collision output (G-CLS-036),
    particle–moby collision (G-PRT-009), HUD slot leftovers (G-UI-030), the race records' save chunk (G-LVL-007).
 5. **Graphics options, the rest** (graphics_options.md): HUD "High resolution" (the HUD drawn at the frame's
