@@ -1334,6 +1334,14 @@ fn setup(
         }
         Err(e) => eprintln!("gameplay: no body joint lists ({e:#}): Clank / Giant Clank's joint points sit at the body's origin"),
     }
+    // A ship class the level itself carries (Gemlik's placed 533, which `rc_game::travel::ship::adopt` makes the ship): its
+    // joint lists from the level's class, as for any class (the canopy glass sits on joint list 0).
+    match class_joint_data_where(lv, |o| rc_game::travel::ship::CLASSES.contains(&o)) {
+        Ok(m) => {
+            for (o, l) in m { svc.joint_lists.entry(o).or_insert_with(|| l.into_iter().map(|(a, _)| a).collect()); }
+        }
+        Err(e) => eprintln!("gameplay: the level's ship classes: no joint lists ({e:#})"),
+    }
     if let Some(id) = ship_id {
         let oc = game.mobys.mobys[id].o_class;
         match crate::travel_render::ship_joint_lists(oc) {
