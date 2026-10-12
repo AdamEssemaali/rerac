@@ -650,8 +650,9 @@ fn menu_frame(
                 let (level, t) = (gs.global.level, gs.global.play_time);
                 rc_game::help::bump(&mut gs.global.move_help[9], level, t);
             }
-            // 0x2aba68: the pause tests (rc_game::menus::mode::in_level_trigger): Giant Clank's / the vehicles' / the
-            // riders' "Quit?" dialogs (mode_freezeInit 4 / 1 / 0), Start / pad lost → the pause menu, Select | R3 → the map.
+            // 0x2aba68: the pause tests (rc_game::menus::mode::in_level_trigger): Giant Clank's / the vehicles' and riders'
+            // "Quit?" dialogs (mode_freezeInit 4 / 1), the Hoverboard's "Quit Race?" (0), Start / pad lost → the pause menu,
+            // Select | R3 → the map.
             let h = &play.game.hero;
             let t = rc_game::menus::mode::TriggerIn {
                 mode: mm.state.mode.raw(),

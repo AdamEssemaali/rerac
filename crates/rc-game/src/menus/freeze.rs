@@ -1,8 +1,8 @@
 //! Game mode 4, the freeze dialog: `mode_freezeInit(kind, arg)` (L01 0x223640 = boot 0x1fbab8), `UpdateModeFreeze`
 //! (L01 0x2249b0 = boot 0x1fce28), `DrawDialogText` (L01 0x2237d8 = boot 0x1fbc50) and the render `FreezeModeRender`
 //! 0x21aac8 (the world, or the page menu when opened from it, then the black 0x40 and the dialog). Every kind:
-//! 0 "Quit Race?" with the race results (the hoverboard races 5 / 16, and the riders on levels 8 / 12), 1 the vehicles'
-//! "Quit?", 2 a "Continue" notice, 3 the memory-card dialog (its text and buttons follow the card monitor's status
+//! 0 "Quit Race?" with the race results (the hoverboard races 5 / 16: Start on the Hoverboard, group 22), 1 the vehicles'
+//! and the riders' (levels 8 / 12) "Quit?", 2 a "Continue" notice, 3 the memory-card dialog (its text and buttons follow the card monitor's status
 //! 0x15eeb0, [`crate::memcard`]), 4 Giant Clank's "Quit?" (leaves the body), 5 the save notice shown once when auto-save
 //! is on, 6 the PAL 60 Hz test. Spec: docs/plan/menus.md §1 "Freeze kinds", docs/plan/progression.md `## saves`.
 //!

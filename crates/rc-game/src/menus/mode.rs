@@ -131,7 +131,8 @@ pub struct TriggerIn {
 /// What the tests start.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Trigger {
-    /// `mode_freezeInit(kind, 0)`: 0 the riders' "Quit?" (levels 8 / 12), 1 the vehicles', 4 Giant Clank's (level 15).
+    /// `mode_freezeInit(kind, 0)`: 0 the Hoverboard's "Quit Race?" (group 22), 1 the vehicles' and the riders' "Quit?"
+    /// (levels 8 / 12), 4 Giant Clank's (level 15).
     Freeze(i32),
     /// `EnterMenuMode(kind)`: 0 the pause menu (Start or the pad lost), 10 the map (Select / R3).
     Menu(i32),
@@ -144,9 +145,10 @@ pub const VEHICLE_CLASSES: [i16; 3] = [0x45, 0x563, 0x4da];
 /// notice are the caller's): `go` = Start pressed or the pad lost.
 /// * level 15, ≥ 8 frames, Giant Clank (0x1413f4 = 2), go, state ≠ 0x72 → kind 4 (nothing while the camera lock is 0x13);
 /// * group 9, state 0x32 riding a vehicle ([`VEHICLE_CLASSES`]), ≥ 8 frames, go, state ≠ 0x72, camera lock ≠ 0x13 → kind 1;
-/// * mode 0, level 8 or 12, go, state 0x32 → kind 0;
-/// * go, ≥ 8 frames, state ≠ 0x72 and either group 22 or (swap state ≠ 2, state ∉ {0x32, 0x1d}, not fallen, HP ≠ 0,
-///   mode 0) → the pause menu (kind 0);
+/// * mode 0, level 8 or 12, go, state 0x32 → kind 1 (0x2abcc8);
+/// * go, ≥ 8 frames, state ≠ 0x72, group 22 (the Hoverboard) → kind 0, "Quit Race?" (0x2abd14);
+/// * go, ≥ 8 frames, state ≠ 0x72, swap state ≠ 2, state ∉ {0x32, 0x1d}, not fallen, HP ≠ 0, mode 0 → the pause menu
+///   (kind 0);
 /// * not the debug step, ≥ 8 frames, Select / R3 (0x500), group ≠ 22, state ∉ {0x72, 0x32, 0x1d}, not fallen, HP ≠ 0,
 ///   mode 0, not riding a vehicle, 0x16c5c4 = 0 → the map (kind 10).
 pub fn in_level_trigger(t: &TriggerIn) -> Option<Trigger> {
@@ -158,9 +160,9 @@ pub fn in_level_trigger(t: &TriggerIn) -> Option<Trigger> {
     }
     let riding = t.group == 9 && t.state == 0x32 && t.riding_class.is_some_and(|c| VEHICLE_CLASSES.contains(&c));
     if riding && settled && go && t.state != 0x72 && t.camera_lock != 0x13 { return Some(Trigger::Freeze(1)); }
-    if t.mode == 0 && (t.level == 8 || t.level == 0xc) && go && t.state == 0x32 { return Some(Trigger::Freeze(0)); }
+    if t.mode == 0 && (t.level == 8 || t.level == 0xc) && go && t.state == 0x32 { return Some(Trigger::Freeze(1)); }
     if go && settled && t.state != 0x72 {
-        if t.group == 0x16 { return Some(Trigger::Menu(0)); }
+        if t.group == 0x16 { return Some(Trigger::Freeze(0)); }
         let blocked = t.swap_state == 2 || t.state == 0x32 || t.state == 0x1d || t.fell || t.hp == 0 || t.mode != 0;
         if !blocked { return Some(Trigger::Menu(0)); }
     }
@@ -180,6 +182,33 @@ pub fn in_level_trigger(t: &TriggerIn) -> Option<Trigger> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 0x2aba68's Start: on the Hoverboard (group 22) "Quit Race?" (kind 0), not the pause menu; the riders of levels 8 /
+    /// 12 (state 0x32) "Quit?" (kind 1); on foot the pause menu.
+    #[test]
+    fn start_on_the_hoverboard_asks_to_quit_the_race() {
+        let t = TriggerIn {
+            mode: 0,
+            frames_in_mode: 8,
+            level: 5,
+            pressed: crate::pad::button::START,
+            connected: true,
+            state: 0,
+            group: 0x16,
+            body: 0,
+            swap_state: 0,
+            fell: false,
+            hp: 4,
+            riding_class: None,
+            camera_lock: 0,
+            debug_step: false,
+            c5c4: 0,
+        };
+        assert_eq!(in_level_trigger(&t), Some(Trigger::Freeze(0)));
+        assert_eq!(in_level_trigger(&TriggerIn { state: 0x72, ..t }), None);
+        assert_eq!(in_level_trigger(&TriggerIn { group: 0, ..t }), Some(Trigger::Menu(0)));
+        assert_eq!(in_level_trigger(&TriggerIn { group: 0, level: 8, state: 0x32, ..t }), Some(Trigger::Freeze(1)));
+    }
 
     #[test]
     fn raw_round_trip_and_tick_rule() {

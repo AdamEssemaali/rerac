@@ -51,8 +51,8 @@ away to another planet, 4 in-space loading loop (`FUN_002a33b0`, entered from `F
 * Start (0x800) or pad lost (`0x13cadc == 0`) → `0x28bf50(0)` → pause menu.
 * Select or R3 (0x500) → `0x28bf50(10)` → map.
 * Return page `0x1ba260` set → `0x28bf50(0)`, which reopens that page (used after a movie or scene launched from the menu).
-* Race level 0xf, vehicles (hero riding class 0x45/0x563/0x4da) and some states → `mode_freezeInit(0|1|4)`
-  instead: the "Quit?" dialog. Pad-removed flag `0x15eeb4 & 1` → `mode_freezeInit(3)`.
+* Instead: Giant Clank on level 0xf → `mode_freezeInit(4)`; riding a vehicle (class 0x45/0x563/0x4da) or a level 8 / 12
+  rider (state 0x32) → `mode_freezeInit(1)` ("Quit?"); the Hoverboard (group 0x16) → `mode_freezeInit(0)` ("Quit Race?"). Pad-removed flag `0x15eeb4 & 1` → `mode_freezeInit(3)`.
 * Ship △ → `0x15f630 = 1` → next tick `FUN_002a27c8` (§5).
 
 **Freeze kinds** (`0x1734c0`, previous mode in `0x1734d4`). Two-line text from `DrawDialogText`.
@@ -146,7 +146,8 @@ func_0021D7A0]: R1/L1 step the slot mod 8, ✕ puts the highlighted owned item t
 **Triggers** (0x2aba68, disasm 0x2abd98..0x2abe4c; mode 0, `0x15f5c8 ≥ 8`, hero state `0x1413d4` ∉ {0x72, 0x32, 0x1d},
 `0x1403fc ≠ 2`, `0x141401 == 0`, HP ≠ 0): Start (`0x13cae4 & 0x800`) or pad lost (`0x13cadc == 0`) → `0x28bf50(0)`;
 Select|R3 (0x500) → `0x28bf50(10)` (strings 1007/2013: map on "SELECT or R3"); return page `0x1ba260` set →
-`0x28bf50(0)`; race level 0xf, vehicles (class 0x45/0x563/0x4da) → `mode_freezeInit(0|1|4)`; pad-removed `0x15eeb4 & 1`
+`0x28bf50(0)`; Giant Clank on level 0xf → `mode_freezeInit(4)`, vehicles (class 0x45/0x563/0x4da) and the level 8 / 12
+riders (state 0x32) → 1, the Hoverboard (group 0x16) → 0 (disasm 0x2abc80..0x2abd18); pad-removed `0x15eeb4 & 1`
 → `mode_freezeInit(3)`. Pad masks (libpad2 bytes big-endian, inverted, boot 0x217328): 0x13cb00 (+0x1c0) held incl.
 stick directions, 0x13cb04 (+0x1c4) pressed edges incl. stick, 0x13caf4 (+0x1b4) pressed edges of buttons only. The
 main loop runs `UpdatePad` 0x27c478 before every mode's update (not mode 1); no catch-up tick in mode 3.
