@@ -1,6 +1,6 @@
 # Roadmap
 
-## Status (2026-10-11)
+## Status (2026-10-12)
 
 Where the port stands; the milestone lists below are the historical record (their "Since" notes say where an item
 went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 2026-10-04" at the top).
@@ -11,7 +11,7 @@ went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 202
   planet) ported every placed class; `rc-trace class-census` lists no placed class without a port on any level
   (classes created only by code show up through `RC_UNPORTED=1`, G-TOOL-017).
 - **Releases:** v0.1.0-alpha (2026-09-30), v0.2.0-alpha (10-05), v0.2.1 / v0.2.2 (10-06), v0.2.3-alpha (10-07),
-  v0.3.0-alpha (10-09), with
+  v0.3.0-alpha (10-09), v0.3.1-alpha (10-11, with a Linux x86_64 package), with
   the launcher (one-time extraction from the player's own disc image, mods) and the website (launcher_contract.md,
   launcher_extractor.md, mods.md).
 - **Systems complete enough to play:** hero on foot and every body (Clank, Giant Clank, the Hologuise), all weapons and
@@ -36,6 +36,15 @@ went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 202
   - graphics options on the Port Options page (graphics_options.md): a Preset (Original / Enhanced), Anti-aliasing
     (Original = the game's AA blit and display copy, Off, 2x / 4x / 8x), Detail distance, Texture filtering, HUD
     (Original / Sharp pixels); every Original is the PS2's look, checked against the previous build.
+- **Since v0.3.1-alpha (2026-10-11 .. 10-12):** the task pools back to Bevy's default threads (the 0.3.1 cap gave a
+  black window on a Windows PC on Vulkan; `RC_THREADS=n` keeps it, G-TOOL-021); the Port Options page back on the
+  Camera frame (four rows, scrolling); Gemlik's base battle (the kill cuboids, asteroids and wave gate read the ridden
+  ship); the map's hero arrow and markers; joint lists for Umbris' turret shots, the flying biters' glow and Aridia's
+  arm platform; the gold weapons (the upgrade's demo scene after the purchase, the level's gold map on their shine in
+  hand, in the demos and on the menu models); Ratchet and his items lit by the area he stands in (Veldin's garage);
+  Ratchet's face layer (the glare at an enemy, the swap, one-hit-point, under-water and firing faces); Kalebo's lifts
+  (their shafts are cylinders); Oltanis's tilting floats (solid again, tilting toward Ratchet); the HUD emptied by the
+  death reload (no oxygen meter after drowning).
 - **Verification:** goldens for every loader (`crates/rc-formats/tests/`, snapshot hashes); PCSX2 comparisons are made
   per question with the PINE probes (`rc-trace read / dump-ee / pine-write --pine`, `work/scratch/*_probe.py`) rather
   than with a full trace harness; the frame-exact trace comparison of M4 is still open (G-TOOL-003..012).
@@ -44,15 +53,22 @@ went), and the open work lives in docs/plan/gaps.md (rows by system, "Survey 202
 
 1. **QA of the recent fixes**: the user's test requests (`docs/test-requests/2026-10-0*.md`), the 2026-10-09 Orxon
    fixes (bubbles, sliding blocks, lift after a load, checkpoint respawn in Clank's section, the turret cutaway), the
-   0.3.1 fixes above and the graphics options (each row, the preset, a change at run time, the saved settings).
+   0.3.1 fixes above and the graphics options (each row, the preset, a change at run time, the saved settings), and the
+   fixes since 0.3.1 (Kalebo's lifts, Oltanis's floats and the face layer are tested headless only).
 2. **Music through Aridia's scene 1** (Skid's agent after the last sandshark, testers' report): not reproduced
    headless (frame-exact and real-time, forced shark count); waiting for an `RC_AUDIO_TRACE=1` log of a real run.
 3. **Smaller behaviours**: Orxon's 10-gadgetbot gate after a reload past it (the turret's latch: the original's code
    says it stays shut, unconfirmed in play), `SetMissionDone(1)` logged every tick on Blarg after the Hydrodisplacer,
-   the stray antenna glow in the Hydrodisplacer pickup scene; from the user's play tests, not yet looked at: nanotech
-   respawn, ship collision, Gemlik's Magneboots wall, Blarg's warship crash and sound, Aridia's teleporter doors,
-   Eudora's infobot twice, Ratchet's head size on stopping, the weapon counter's hiding (its icon: fixed 0fe5dd3),
-   weapons visible while swimming, camera features).
+   the stray antenna glow in the Hydrodisplacer pickup scene; from the play tests, not yet looked at: nanotech stuck
+   after an infobot movie, ship collision, Gemlik's Magneboots wall, Eudora's infobot twice, Ratchet's head size on
+   stopping, the weapon counter's hiding (its icon: fixed 0fe5dd3), weapons visible while swimming, Umbris' Hydrodisplacer spots floating, Kerwan's taxi on the first visit, Blarg's Clank doors. Needing a
+   repro or a reference from the original: Oltanis's map going blank (the level's map state lost while the menu is
+   closed: the trigger is not found), Gaspar's metal crates without bolts (the code matches the game), Qwark floating
+   at Oltanis's PDA stand (the data and the code put him there), Rilgar's Hydrodisplacer, Pokitaru's HUD, Clank's eye
+   colour, the skies, the dark gun blast, see-through surfaces, camera features. The sound reports (teleporter
+   arrivals, Clank's Heli-Pack, glide and footsteps, Kerwan's traffic, Blarg's warship (its crash is fixed), music at the ship, the vendor and after the
+   Umbris fight) wait for a way to trace sound in a silent run. Found faithful, no change: the grind lean with the
+   camera ahead (the game picks it on screen), the O2 Mask's and the gold display props' chrome wash.
 4. **Fidelity rows in gaps.md**: the GS state of class draws (G-REN-036), stale collision output (G-CLS-036),
    particle–moby collision (G-PRT-009), HUD slot leftovers (G-UI-030), the race records' save chunk (G-LVL-007).
 5. **Graphics options, the rest** (graphics_options.md): HUD "High resolution" (the HUD drawn at the frame's
