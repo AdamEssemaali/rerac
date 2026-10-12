@@ -1,25 +1,26 @@
 //! **Kalebo's lifts, class 1826** (level16 `0x2e7f80` with its glow `0x2e84e8`, 2 placed; census U568; the name is
-//! descriptive [L]): a platform that rides up and down the height of its cuboid (pvar +0xa0) and carries Ratchet. It
+//! descriptive [L]): a platform that rides up and down the height of its cylinder (pvar +0xa0, the volume table 0x1600fc)
+//! and carries Ratchet. It
 //! starts at the top; standing on it sends it to the other end, and so does waiting within 20 (xy) at the height of
 //! the other end (within 1). While it moves it hums (a looping class sound 0) and a column of glowing rings turns up
-//! the cuboid, brighter the faster it goes. Coming down onto Ratchet standing under it (within 1.5 of the cuboid's
+//! the cylinder, brighter the faster it goes. Coming down onto Ratchet standing under it (within 1.5 of the cylinder's
 //! centre, about 2 below it) it brakes hard and waits. Read from the level16 decomp and its words gp−0x4d54..−0x4d18.
 //!
 //! **Pvars** (0xc0, mode 0x20): +0x00 the creature record's offset (0x20), +0x08 the platform block's (0x60), +0xa0 the
-//! cuboid, +0xa8 the target z, +0xb0 the velocity, +0xb4 the hum's voice, +0xb8 the rings' first height above the
-//! cuboid's bottom, +0xbc their spacing.
+//! cylinder, +0xa8 the target z, +0xb0 the velocity, +0xb4 the hum's voice, +0xb8 the rings' first height above the
+//! cylinder's bottom, +0xbc their spacing.
 //!
-//! The ends: e(s) = s·(cuboid row 2).z + cuboid centre z + 0.5 (the up axis at its half height; s = +1 top, −1 bottom).
+//! The ends: e(s) = s·(cylinder row 2).z + cylinder centre z + 0.5 (the up axis at its half height; s = +1 top, −1 bottom).
 //!
 //! | address | what | port |
 //! |---|---|---|
 //! | state 0 | +0xb4 = −1; +0xa8 = e(+1) − 0.5; +0xbc = 1 (at the top); → 2; z = e(+1) | [`update`] |
 //! | state 2 | the hum released (`SoundIsAlive` 0x286708, `release_voice_slot`); `vec_distance2(position, Ratchet)` < 20 and \|Ratchet's z − e(the other end)\| < 1, or Ratchet on it (0x13f64c) and grounded → +0xbc ^= 1, +0xa8 = e(the other end), +0xb0 = 0, → 3 | [`update`] |
-//! | state 3 | Ratchet more than 1.5 (`vec_distance2`, 2.25) from the cuboid's centre, or \|z − his z − 2\| > 1, or z < +0xa8: `0x257268(+0xa8, 12·dt², 12·dt², 6·dt, &z, &+0xb0)` (L01 0x270830); else the same toward z itself with 48·dt² (the brake) | [`update`] (`turn::spring`) |
+//! | state 3 | Ratchet more than 1.5 (`vec_distance2`, 2.25) from the cylinder's centre, or \|z − his z − 2\| > 1, or z < +0xa8: `0x257268(+0xa8, 12·dt², 12·dt², 6·dt, &z, &+0xb0)` (L01 0x270830); else the same toward z itself with 48·dt² (the brake) | [`update`] (`turn::spring`) |
 //! | | the step 0 → the hum released; moving and no hum → +0xb4 = `PlayClassSound(0, 4)` | [`update`] |
 //! | | z = +0xa8 and Ratchet not on it (or airborne) → +0x70 zeroed (`0x1fdac8`), → 2; else +0xb0 ≠ 0 → `RegisterDrawCallback(0x2e84e8, m, position)` | [`update`] (`Callback::UnitQuads`) |
 //! | every tick | `CarryRiders(+0x60, position − old position, Euler, Euler)` (0x25c030 = L01 0x2755f8; state 3's own call with the step is overwritten by it) | [`update`] (`triggers::carry_riders`) |
-//! | `0x2e84e8` | FX 0xe, ALPHA 0x48 (gp−0x4d34..−0x4d28: 0, 2, 0, 1), TEX1 bilinear; colour `FastTweenColor(\|v\|/(6·dt), 0x00408000, 0x40c08030)`; rings from the cuboid's bottom + +0xb8 to its top + +0xb8, +0xbc apart, turning `(tick mod 120)·1.5°` alternately each way: 24 quads of 15° at radius 2.9 (2.85 at the bottom edge), ±0.5 high, ST (0, 0) (0, 1) (1, 0) (1, 1) | [`fx_quads`] |
+//! | `0x2e84e8` | FX 0xe, ALPHA 0x48 (gp−0x4d34..−0x4d28: 0, 2, 0, 1), TEX1 bilinear; colour `FastTweenColor(\|v\|/(6·dt), 0x00408000, 0x40c08030)`; rings from the cylinder's bottom + +0xb8 to its top + +0xb8, +0xbc apart, turning `(tick mod 120)·1.5°` alternately each way: 24 quads of 15° at radius 2.9 (2.85 at the bottom edge), ±0.5 high, ST (0, 0) (0, 1) (1, 0) (1, 1) | [`fx_quads`] |
 
 use super::{FxQuad, FxQuads};
 use crate::moby_runtime::{MobyId, MobyTable};
@@ -38,7 +39,7 @@ pub const CLASSES: [i16; 1] = [1826];
 pub mod pv {
     pub const BLOCK: usize = 0x60;
     pub const STOP: usize = 0x70;
-    pub const CUBOID: usize = 0xa0;
+    pub const CYLINDER: usize = 0xa0;
     pub const TARGET: usize = 0xa8;
     pub const VEL: usize = 0xb0;
     pub const VOICE: usize = 0xb4;
@@ -61,9 +62,10 @@ const SEGMENT: f32 = 15.0;
 const GLOW_FX: usize = 0xe;
 const ST: [[f32; 2]; 4] = [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]];
 
-/// The cuboid's row 2 z (its half height) and centre z.
-fn cuboid(svc: &Services, i: i32) -> Option<(f32, [f32; 4])> {
-    let s = svc.volumes.shape(rc_formats::volumes::ShapeKind::Cuboid, i)?;
+/// The cylinder's row 2 z (its half height) and centre (the table 0x1600fc the update indexes; on Kalebo cuboids 0 / 1
+/// are 1-unit boxes elsewhere, the cylinders 0 / 1 the two shafts).
+fn cylinder(svc: &Services, i: i32) -> Option<(f32, [f32; 4])> {
+    let s = svc.volumes.shape(rc_formats::volumes::ShapeKind::Cylinder, i)?;
     Some((s.matrix[2][2], s.matrix[3]))
 }
 
@@ -89,7 +91,7 @@ fn go(w: &mut World, id: MobyId, target: f32) {
 pub fn update(w: &mut World, id: MobyId) {
     if w.m(id).pvars.len() < pv::SIZE { return; }
     let old = w.m(id).position;
-    let Some((half, centre)) = cuboid(w.svc, c::pi32(w, id, pv::CUBOID)) else { return };
+    let Some((half, centre)) = cylinder(w.svc, c::pi32(w, id, pv::CYLINDER)) else { return };
     let end = |s: f32| s * half + centre[2] + STAND;
     match w.m(id).state {
         0 => {
@@ -139,7 +141,7 @@ pub fn update(w: &mut World, id: MobyId) {
 /// Level16 `0x2e84e8`: the rings (module doc; draw only).
 pub fn fx_quads(table: &MobyTable, svc: &Services, id: MobyId) -> Option<FxQuads> {
     let m = table.mobys.get(id).filter(|m| m.pvars.len() >= pv::SIZE)?;
-    let (half, centre) = cuboid(svc, p::i32(&m.pvars, pv::CUBOID))?;
+    let (half, centre) = cylinder(svc, p::i32(&m.pvars, pv::CYLINDER))?;
     let (base, step) = (p::ff(&m.pvars, pv::RING_BASE), p::ff(&m.pvars, pv::RING_STEP));
     let top = centre[2] + half + base;
     let v = p::ff(&m.pvars, pv::VEL).abs();

@@ -617,3 +617,33 @@ fn survey_positions() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------------
+// U568: Kalebo's lifts 1826
+
+/// The lifts ride their cylinders (the table 0x1600fc: cylinder 0 = 5.5 high about z 126 at the first lift, cylinder 1
+/// = 6.368 about z 126.85 at the second): each starts at its top, e(+1) = half + centre z + 0.5, and Ratchet standing
+/// on one sends it down to e(−1).
+#[test]
+fn kalebo_lifts_ride_their_cylinders() {
+    use rc_game::moby_update::classes::units::kalebo_lift as kl;
+    let Some(mut lv) = load(16) else { eprintln!("skipped"); return };
+    let lifts = lv.of_class(kl::CLASSES[0]);
+    assert_eq!(lifts.len(), 2);
+    let far = hero_at([1.0, 1.0, 1.0]);
+    lv.load_pass(&far);
+    for &l in &lifts { lv.run(&far, l, unit("U568 1826")); }
+    let ends: Vec<(f32, f32)> = lifts
+        .iter()
+        .map(|&l| {
+            let s = lv.svc.volumes.shape(rc_formats::volumes::ShapeKind::Cylinder, p::i32(&lv.table.mobys[l].pvars, kl::pv::CYLINDER)).unwrap();
+            (s.matrix[2][2] + s.matrix[3][2] + kl::STAND, -s.matrix[2][2] + s.matrix[3][2] + kl::STAND)
+        })
+        .collect();
+    assert_eq!(ends, vec![(132.0, 121.0), (126.85 + 6.368 + 0.5, 126.85 - 6.368 + 0.5)]);
+    for (&l, e) in lifts.iter().zip(&ends) { assert_eq!(lv.table.mobys[l].position[2], e.0, "at the top"); }
+    let mut on = far.clone();
+    on.ground_moby = Some(lifts[0]);
+    for _ in 0..600 { lv.run(&on, lifts[0], unit("U568 1826")); }
+    assert_eq!(lv.table.mobys[lifts[0]].position[2], ends[0].1, "ridden to the bottom");
+}
