@@ -114,6 +114,8 @@ struct Part {
     /// The moby's +0x20 (the 3D Ratchet's Heli-Pack: its rotor cycles left, [`back_update`]) and its blend snapshot.
     count: u8,
     snap: Option<moby_anim::MobyFrame>,
+    /// The gold look last given to its metal (`ExtraMobys::set_gold`).
+    gold: Option<bool>,
 }
 
 #[derive(Resource)]
@@ -268,7 +270,7 @@ fn setup(
         let slots = (anim.joint_count as u32).max(ExtraMobys::max_skinned_joint(class) as u32 + 1).max(1);
         parts.push(Part {
             role: *role, o_class: class.o_class as i16, anim: anim.clone(), scale: class.class.header.scale, base: palette_len, slots,
-            entities: Vec::new(), shown: false, state: AnimState::spawn(anim), cut_for: -1, count: 0, snap: None,
+            entities: Vec::new(), shown: false, state: AnimState::spawn(anim), cut_for: -1, count: 0, snap: None, gold: None,
         });
         palette_len += slots;
     }
@@ -650,6 +652,15 @@ fn update(
     let mut records = buffers.get(&rt.extra.instances).and_then(|b| b.data.clone()).unwrap_or_default();
     let before = (palette.clone(), records.clone());
     for (k, (p, pl)) in rt.parts.iter_mut().zip(&placed).enumerate() {
+        // The hand item and the item preview load their class with `select_world_object_resource_tables` (from
+        // `LoadHandGadget` 0x297d70 / the preview 0x291c38): a gold weapon shines with the gold map.
+        if matches!(p.role, Role::Hand | Role::Item) {
+            let gold = play.as_ref().is_some_and(|q| q.game.item_data.as_ref().is_some_and(|d| d.gold_class(&q.game.hero.weapons.gold, p.o_class as i32)));
+            if p.gold != Some(gold) {
+                p.gold = Some(gold);
+                rt.extra.set_gold(&mut commands, k as u32, p.o_class as i32, gold);
+            }
+        }
         let show = pl.is_some();
         if p.shown != show {
             p.shown = show;

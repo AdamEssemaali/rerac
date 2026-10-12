@@ -914,6 +914,7 @@ fn upload_actors(
     mut buffers: ResMut<Assets<ShaderBuffer>>,
     mut q: Query<(&mut Transform, &mut Visibility)>,
     play: Option<Res<Play>>,
+    gs: Option<Res<Persistent>>,
 ) {
     let t = &mut *t;
     let Some(lump) = t.lump.clone() else {
@@ -925,7 +926,12 @@ fn upload_actors(
         despawn_gfx(&mut t.gfx, &mut commands);
         t.gfx.lump = Some((lump.index, flight));
         let layer = flight.then(|| RenderLayers::layer(TRAVEL_LAYER));
-        if let Err(e) = spawn_gfx(&mut t.gfx, &mut commands, &mut level.0, &lump.scene, t.mode.actors.iter().map(|a| a.1).collect(), layer, None, &mut meshes, &mut images, &mut materials, &mut buffers) {
+        // The gold flags as the purchase left them (the hero's copy follows a tick later).
+        let gold = |o: i32| match (play.as_ref().and_then(|p| p.game.item_data.as_ref()), gs.as_ref()) {
+            (Some(d), Some(gs)) => d.gold_class(&gs.0.global.gold_weapons, o),
+            _ => false,
+        };
+        if let Err(e) = spawn_gfx(&mut t.gfx, &mut commands, &mut level.0, &lump.scene, t.mode.actors.iter().map(|a| a.1).collect(), layer, None, &gold, &mut meshes, &mut images, &mut materials, &mut buffers) {
             warn!("travel: space actors not drawn: {e:#}");
         }
     }
@@ -1063,7 +1069,7 @@ fn gadget_class(o_class: i32) -> Option<(LevelMobyClass, MobyAnimClass)> {
 /// The actors' classes (the level's, the spaceships file's 530..537, or the level's gadget table) as extra mobys, each with its streamed sequence in
 /// an extra class slot (crate::scene_render's `spawn_actors`), on render layer `layer` (None: the default layer).
 /// `light`: the actors' light words (`parse_space_scene_chunk`: the hero's, else light 0 and ambient 0x38); None: the
-/// level's Ratchet instance's.
+/// level's Ratchet instance's. `gold`: whether a gadget class loads as a gold weapon (`ItemData::gold_class`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_gfx(
     g: &mut ActorGfx,
@@ -1073,6 +1079,7 @@ pub(crate) fn spawn_gfx(
     classes: Vec<i32>,
     layer: Option<RenderLayers>,
     light: Option<(u32, [u8; 3])>,
+    gold: &dyn Fn(i32) -> bool,
     meshes: &mut Assets<Mesh>,
     images: &mut Assets<Image>,
     materials: &mut Assets<MobyMaterial>,
@@ -1081,6 +1088,7 @@ pub(crate) fn spawn_gfx(
     if let Some(i) = level.mobys.instances.iter().find(|i| i.o_class == 0) { (g.light_word, g.ambient) = (i.light_word(), i.ambient_rgb()); }
     if let Some(l) = light { (g.light_word, g.ambient) = l; }
     let mut specs = Vec::new();
+    let mut gadgets = Vec::new();
     let mut palette_len = 0u32;
     let Some(c0) = scene.chunks.first() else { return Ok(()) };
     for (k, a) in c0.actors.iter().enumerate() {
@@ -1089,9 +1097,12 @@ pub(crate) fn spawn_gfx(
             Some(ci) => Some((level.mobys.classes[ci].clone(), level.mobys.anim[ci].clone())),
             None if (530..=537).contains(&class) => Some(load_spaceship_class(level, class)?),
             // A gadget class (a weapon demo's weapon: `select_world_object_resource_tables(item class)` loads it from the
-            // level's gadget table), its sequences in its own blob.
+            // level's gadget table, a gold weapon with the gold map), its sequences in its own blob.
             None => match gadget_class(class) {
-                Some(g) => Some(g),
+                Some(g) => {
+                    gadgets.push((k as u32, class));
+                    Some(g)
+                }
                 None => {
                     warn!("travel: space actor class {class} is not on this level: not drawn");
                     None
@@ -1122,6 +1133,7 @@ pub(crate) fn spawn_gfx(
         let scale = cl.as_ref().map_or(1.0, |c| c.class.header.scale);
         g.actors.push(GfxActor { anim, slot, chunk: None, scale, base, slots, entities, glow: None });
     }
+    for (k, class) in gadgets { extra.set_gold(commands, k, class, gold(class)); }
     g.extra = Some(extra);
     g.palette_len = palette_len;
     Ok(())

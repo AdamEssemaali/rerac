@@ -250,7 +250,8 @@ with 0x19304000 / 0x580000000 = **64×64** from core[0x98] / core[0x9c]; MIPTBP1
 0x20 | data_lo << 32` (MXL 0, MMAG linear; every metal ad-gif on Novalis has data_hi 4 → linear); CLAMP_1 = 5 (clamp).
 core[0x90..0x9c] are byte offsets into the gs_ram lump (Novalis: chrome 0x400 / pal 0x0, glass 0x4800 / pal 0x4400); both
 maps decode to blurry environment photographs with alpha 13..128. **Chrome and glass differ only in the map** (same VU0
-path, same GS state). (0x182c70, from core[0xc0]/[0xc4], is a third 128×128 map used elsewhere.)
+path, same GS state). (0x182c70, from core[0xc0]/[0xc4], is the **gold** 128×128 map: `select_world_object_resource_tables` writes it
+into the first metal ad-gif of a gold weapon's class, `ExtraMobys::set_gold`.)
 
 **Novalis classes with metal packets:** placed: 13 (281 instances, the bolt pickups (threaded shaft + head, seen in a close shot); 1 high packet + 2 metal packets, all glass; jc 1),
 1456–1465 (one instance each, 3–7 chrome packets, jc 1, far east of the start), 1818 (1 instance, 4 chrome packets, jc

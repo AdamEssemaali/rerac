@@ -299,7 +299,7 @@ fn spawn(
     }
     // The actors (`parse_space_scene_chunk`: no hero on the title, the light words 0x38383800000000).
     let classes = d.scene.actor_classes();
-    if let Err(e) = crate::travel_render::spawn_gfx(&mut rt.gfx, &mut commands, lv, &d.scene, classes, Some(world.clone()), Some((0, ACTOR_AMBIENT)), &mut meshes, &mut images, &mut moby_mats, &mut buffers) {
+    if let Err(e) = crate::travel_render::spawn_gfx(&mut rt.gfx, &mut commands, lv, &d.scene, classes, Some(world.clone()), Some((0, ACTOR_AMBIENT)), &|_| false, &mut meshes, &mut images, &mut moby_mats, &mut buffers) {
         warn!("title world: actors not drawn: {e:#}");
     }
     rt.scene = Some(TitleScene::new(d.scene.clone()));

@@ -92,6 +92,12 @@ pub struct ItemData {
 impl ItemData {
     pub fn class(&self, o_class: i16) -> Option<&ItemClass> { self.classes.iter().find(|c| c.o_class == o_class) }
     pub fn def(&self, id: i32) -> ItemDef { self.defs.get(id.max(0) as usize).copied().unwrap_or_default() }
+
+    /// Whether a gadget class loads as a gold weapon (`select_world_object_resource_tables` L01 0x259788): the first
+    /// of the 0x25 item definitions whose class (+0x10) is `o_class` has its gold flag `gold[item]` (0x13e520) set.
+    pub fn gold_class(&self, gold: &[u8], o_class: i32) -> bool {
+        self.defs.iter().take(0x25).position(|d| d.o_class == o_class).is_some_and(|i| gold.get(i).is_some_and(|&g| g != 0))
+    }
 }
 
 /// The globals outside the hero block that the hand swap uses (synced by the engine).
@@ -694,6 +700,22 @@ pub fn update_hand_selected(hero: &mut Hero, g: &mut ItemGlobals, rng: &mut Rng,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `select_world_object_resource_tables`' gold test: the first definition of the class decides, by its gold flag.
+    #[test]
+    fn a_class_is_gold_by_its_first_items_flag() {
+        let mut data = ItemData { defs: vec![ItemDef::default(); 37], ..Default::default() };
+        data.defs[10].o_class = 192;
+        data.defs[11].o_class = 192;
+        data.defs[12].o_class = 208;
+        let mut gold = vec![0u8; 40];
+        gold[11] = 1;
+        assert!(!data.gold_class(&gold, 192), "item 10 is the class's first item");
+        gold[10] = 1;
+        assert!(data.gold_class(&gold, 192));
+        assert!(!data.gold_class(&gold, 208));
+        assert!(!data.gold_class(&gold, 71), "a class no item has");
+    }
 
     /// `HeroItemsUpdate`'s head and `FUN_002487a8`: the wrench is hidden on a ledge (group 3) and in the water, and a
     /// weapon is swapped for it there (0x1413f7); on foot neither; the gold bolt's 0x1413ff hides any item.

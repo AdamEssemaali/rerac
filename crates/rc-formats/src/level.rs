@@ -86,6 +86,11 @@ pub struct LevelCore {
     pub shrub_textures: Vec<TextureEntry>,
     pub gadgets: Vec<GadgetEntry>,
     pub ratchet_seqs: Vec<i32>,
+    /// Core index words 0x30 / 0x31 (bytes 0xc0 / 0xc4, past [`LevelCoreHeader`]): the **gold** environment map's
+    /// texture and palette, byte offsets into the gs_ram lump like `chrome_map_*`. `LoadLevelCoreData` (L01 0x258128)
+    /// builds TEX0 0x182c70 from them (128×128 PSMT8, the chrome map's form); `select_world_object_resource_tables`
+    /// gives it to a gold weapon's metal packets. [-1, -1] when the index is too short.
+    pub gold_map: [i32; 2],
     /// Every block of the decompressed core data with its size from the boundary rule.
     pub blocks: Vec<CoreBlock>,
 }
@@ -122,6 +127,7 @@ pub fn parse_level_core(index: &[u8], data_size: usize) -> Result<LevelCore> {
         shrub_textures: table(idx, h.shrub_textures, "shrub textures")?,
         gadgets,
         ratchet_seqs,
+        gold_map: idx.pod(0xc0, "gold map words").unwrap_or([-1, -1]),
         blocks: Vec::new(),
     };
 

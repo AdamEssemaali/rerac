@@ -181,6 +181,17 @@ pub fn boot_state(root: &std::path::Path, index: u32) -> Option<(GameState, Sess
         for b in gs.levels.iter_mut().flat_map(|l| l.gold_bolts.iter_mut()).take(n) { *b = 1; }
         println!("game state: RC_GIVE_GOLD_BOLTS: {n} gold bolts");
     }
+    // RC_GIVE_GOLD_WEAPONS=<id>,<id>,...: those items' gold versions owned (0x13e520[id] = 1, decimal or 0x hex ids;
+    // debug: the gold look and the gold weapons' effects). Give the items themselves with RC_GIVE_ITEMS.
+    if let Ok(v) = std::env::var("RC_GIVE_GOLD_WEAPONS") {
+        let ids: Vec<usize> = v
+            .split(',')
+            .filter_map(|t| { let t = t.trim(); t.strip_prefix("0x").map_or_else(|| t.parse().ok(), |h| usize::from_str_radix(h, 16).ok()) })
+            .filter(|&i| i < gs.global.gold_weapons.len())
+            .collect();
+        for &i in &ids { gs.global.gold_weapons[i] = 1; }
+        println!("game state: RC_GIVE_GOLD_WEAPONS: gold items {ids:?}");
+    }
     // RC_UNLOCK_PLANETS=<p>,<p>,...: those planets unlocked (`UnlockPlanet` 0x2756d0: 0x13dd40 and the map order
     // 0x13d510) from the start (debug): the ship's planet page lists them (rc_game::travel).
     if let Ok(v) = std::env::var("RC_UNLOCK_PLANETS") {

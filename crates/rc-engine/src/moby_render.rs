@@ -105,6 +105,9 @@ const GREY: usize = usize::MAX;
 /// Metal packet textures (TEX0 data_lo): the level's chrome and glass maps.
 const TEX_CHROME: i32 = -2;
 const TEX_GLASS: i32 = -3;
+/// The port's key for the level's gold map (0x182c70): not a packet value, the game writes that TEX0 into a gold
+/// weapon's metal ad-gif ([`ExtraMobys::set_gold`]).
+const TEX_GOLD: i32 = -4;
 
 /// Level mobys after load: classes, animation data, instances and their light blocks.
 pub struct LevelMobys {
@@ -119,10 +122,10 @@ pub struct LevelMobys {
     /// (class, per packet per vertex RGBA); `Placed::colors` indexes it.
     pub colors: Vec<(usize, Vec<Vec<[u8; 4]>>)>,
     pub cpu_light: bool,
-    /// The metal pass's environment maps: chrome (128×128) and glass (64×64) PSMT8 from gs_ram at the core
-    /// header's `chrome_map_*` / `glass_map_*` byte offsets (the TEX0 words 0x19e6c0 / 0x19e6d8 the level
-    /// loader builds, L01 0x258128).
-    pub env_maps: [Option<Texture>; 2],
+    /// The metal pass's environment maps: chrome (128×128), glass (64×64) and gold (128×128) PSMT8 from gs_ram at
+    /// the core header's `chrome_map_*` / `glass_map_*` byte offsets and `LevelCore::gold_map` (the TEX0 words
+    /// 0x19e6c0 / 0x19e6d8 / 0x182c70 the level loader builds, L01 0x258128).
+    pub env_maps: [Option<Texture>; 3],
     pub parse_time: Duration,
     pub light_time: Duration,
 }
@@ -142,9 +145,10 @@ pub struct Placed {
 
 fn env_on(name: &str) -> bool { std::env::var(name).is_ok_and(|v| v.trim() == "1") }
 
-/// Chrome (128×128) and glass (64×64) maps: TEX0 TBP0 = (gs base + `*_texture`) >> 8, CBP = (gs base +
-/// `*_palette`) >> 8, both byte offsets into the gs_ram lump (0x1d308000 / 0x19304000 give the sizes).
-fn decode_env_maps(core: &LevelCore, gs_ram: &[u8]) -> [Option<Texture>; 2] {
+/// Chrome (128×128), glass (64×64) and gold (128×128) maps: TEX0 TBP0 = (gs base + `*_texture`) >> 8, CBP = (gs
+/// base + `*_palette`) >> 8, both byte offsets into the gs_ram lump (0x1d308000 / 0x19304000 give the sizes; the
+/// gold word is built like the chrome one).
+fn decode_env_maps(core: &LevelCore, gs_ram: &[u8]) -> [Option<Texture>; 3] {
     let h = &core.header;
     let one = |tex: i32, pal: i32, side: u32| -> Option<Texture> {
         let (t, p) = (usize::try_from(tex).ok()?, usize::try_from(pal).ok()?);
@@ -152,7 +156,11 @@ fn decode_env_maps(core: &LevelCore, gs_ram: &[u8]) -> [Option<Texture>; 2] {
         let clut = gs_ram.get(p..p + 1024)?;
         rc_formats::texture::decode_indexed8(px, side, side, clut).ok()
     };
-    [one(h.chrome_map_texture, h.chrome_map_palette, 128), one(h.glass_map_texture, h.glass_map_palette, 64)]
+    [
+        one(h.chrome_map_texture, h.chrome_map_palette, 128),
+        one(h.glass_map_texture, h.glass_map_palette, 64),
+        one(core.gold_map[0], core.gold_map[1], 128),
+    ]
 }
 
 /// Parses the classes, their sequences and the instances, and builds every instance's light block.
@@ -760,9 +768,23 @@ struct Part {
 #[derive(Clone)]
 struct MetalPart {
     kind: i32,
+    /// Drawn with the texture of the first metal packet's ad-gif, the one a gold weapon's gets ([`gold_chain`]).
+    gold: bool,
     mesh: Handle<Mesh>,
     triangles: usize,
     caster: bool,
+}
+
+/// Per metal packet: whether its triangles of texture `t` are drawn with the ad-gif `select_world_object_resource_tables`
+/// (L01 0x259788) patches for a gold weapon: the last ad-gif block of the first metal packet (`list + (qwc − 4)·16`,
+/// its TEX0 at +0x20) and the packets after it that set none (the GS keeps the texture). Exact while the first packet
+/// has one ad-gif, as on every gadget class of the disc; with more, its triangles of the last block's texture value.
+fn gold_chain(class: &LevelMobyClass) -> Vec<Option<i32>> {
+    let mut on = None;
+    class.class.metal.iter().enumerate().map(|(si, sub)| {
+        if si == 0 { on = sub.texture_indices.last().copied(); } else if !sub.texture_indices.is_empty() { on = None; }
+        on
+    }).collect()
 }
 
 /// Texture key of a regular triangle: the moby texture table index, [`GREY`] for −1, None for an unused class
@@ -846,12 +868,13 @@ fn build_parts(class: &LevelMobyClass, lod: &[MobySubmesh], identity: bool, glow
 fn build_metal_parts(class: &LevelMobyClass, meshes: &mut Assets<Mesh>) -> (Vec<MetalPart>, u8) {
     #[derive(Default)]
     struct B { pos: Vec<[f32; 3]>, skin: Vec<[u32; 4]>, idx: Vec<u32>, remap: HashMap<(usize, u32), u32>, tris: usize }
-    let mut by_kind: BTreeMap<i32, B> = BTreeMap::new();
+    let mut by_kind: BTreeMap<(i32, bool), B> = BTreeMap::new();
     let mut max_joint = 0u8;
+    let gold = gold_chain(class);
     for (si, sub) in class.class.metal.iter().enumerate() {
         for t in &sub.triangles {
             if t.texture != TEX_CHROME && t.texture != TEX_GLASS { continue; }
-            let b = by_kind.entry(t.texture).or_default();
+            let b = by_kind.entry((t.texture, gold[si] == Some(t.texture))).or_default();
             b.tris += 1;
             for vi in [t.a, t.b, t.c] {
                 let v = *b.remap.entry((si, vi)).or_insert_with(|| {
@@ -873,12 +896,12 @@ fn build_metal_parts(class: &LevelMobyClass, meshes: &mut Assets<Mesh>) -> (Vec<
     }
     let parts = by_kind
         .into_iter()
-        .map(|(kind, b)| {
+        .map(|((kind, gold), b)| {
             let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
                 .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, b.pos)
                 .with_inserted_attribute(ATTRIBUTE_MOBY_SKIN, VertexAttributeValues::Uint32x4(b.skin))
                 .with_inserted_indices(Indices::U32(b.idx));
-            MetalPart { kind, mesh: meshes.add(mesh), triangles: b.tris, caster: class.class.header.shadow != 0 }
+            MetalPart { kind, gold, mesh: meshes.add(mesh), triangles: b.tris, caster: class.class.header.shadow != 0 }
         })
         .collect();
     (parts, max_joint)
@@ -939,10 +962,11 @@ fn gs_image(w: u32, h: u32, rgba: &mut [u8], mode: ImageAddressMode) -> Image {
     img
 }
 
-/// The chrome (−2) or glass (−3) map: TEX1 MXL 0 / MMAG linear, CLAMP_1 = 5 (`fun_00202d78`). A level whose
-/// map does not decode gets a magenta 1×1.
+/// The chrome (−2), glass (−3) or gold ([`TEX_GOLD`]) map: TEX1 MXL 0 / MMAG linear, CLAMP_1 = 5 (`fun_00202d78`). A
+/// level whose map does not decode gets a magenta 1×1.
 fn metal_image(level: &LoadedLevel, kind: i32, images: &mut Assets<Image>) -> (Handle<Image>, AlphaRange) {
-    let (w, h, mut rgba) = match &level.mobys.env_maps[if kind == TEX_CHROME { 0 } else { 1 }] {
+    let map = match kind { TEX_CHROME => 0, TEX_GOLD => 2, _ => 1 };
+    let (w, h, mut rgba) = match &level.mobys.env_maps[map] {
         Some(t) => (t.width, t.height, t.rgba.clone()),
         None => {
             warn!("moby metal texture {kind}: no env map decoded; drawing magenta");
@@ -1759,6 +1783,16 @@ pub struct ExtraMobys {
     slot_metal_shown: HashMap<u32, i32>,
     /// The caster order each slot's shown group has ([`queue_late`]).
     slot_late: HashMap<u32, bool>,
+    /// [`ExtraMobys::set_gold`]: per (slot, class), the metal entities drawn with the first metal ad-gif's texture.
+    gold: HashMap<(u32, i32), GoldParts>,
+}
+
+/// The metal entities of one (slot, class) a gold weapon's patch reaches, their own map and the gold map.
+struct GoldParts {
+    ents: Vec<Entity>,
+    own: Handle<Image>,
+    gold: Handle<Image>,
+    on: bool,
 }
 
 /// What a slot of an extra record set shows ([`ExtraMobys::show_slot`]).
@@ -1818,6 +1852,7 @@ impl ExtraMobys {
             slot_metal: HashMap::new(),
             slot_metal_shown: HashMap::new(),
             slot_late: HashMap::new(),
+            gold: HashMap::new(),
         }
     }
 
@@ -1933,6 +1968,25 @@ impl ExtraMobys {
         });
     }
 
+    /// Slot `slot`'s class `o_class` as a gold weapon or not: `select_world_object_resource_tables` (L01 0x259788), loading
+    /// a gadget class, finds the first item definition of that class (0x179f50 + 0x4c·item, 0x25 items) and, when the
+    /// item's gold flag 0x13e520[item] is set, writes the gold map's TEX0 / its next word (0x182c70 / 0x182c80, built
+    /// from `LevelCore::gold_map` by `LoadLevelCoreData`) into the class's first metal packet's ad-gif: the metal it
+    /// textures ([`gold_chain`]) shines with the gold map instead of its own. A class without such metal is unchanged.
+    /// The callers decide the flag (`rc_game::hero::items::gold_class`).
+    pub fn set_gold(&mut self, commands: &mut Commands, slot: u32, o_class: i32, on: bool) {
+        let Some(g) = self.gold.get_mut(&(slot, o_class)).filter(|g| g.on != on) else { return };
+        g.on = on;
+        let (ents, image) = (g.ents.clone(), if on { g.gold.clone() } else { g.own.clone() });
+        commands.queue(move |world: &mut World| {
+            let hs: Vec<_> = ents.iter().filter_map(|&e| world.get::<MeshMaterial3d<MobyMetalMaterial>>(e).map(|m| m.0.clone())).collect();
+            let mut mats = world.resource_mut::<Assets<MobyMetalMaterial>>();
+            for h in hs {
+                if let Some(mut m) = mats.get_mut(&h) { m.texture = image.clone(); }
+            }
+        });
+    }
+
     /// The metal entities of `class` for record `slot` (one per metal texture and GS pass), with `tracked` when
     /// update_extra_metal owns their shine. The caller only lends the regular material store, so the metal materials
     /// are added by a queued command.
@@ -1953,7 +2007,13 @@ impl ExtraMobys {
         let metal = self.metal_parts.entry(class.o_class).or_insert_with(|| build_metal_parts(class, meshes).0).clone();
         let mut out = Vec::new();
         for part in &metal {
-            let (image, texel_alpha) = self.metal_images.entry(part.kind).or_insert_with(|| metal_image(level, part.kind, images)).clone();
+            let (image, mut texel_alpha) = self.metal_images.entry(part.kind).or_insert_with(|| metal_image(level, part.kind, images)).clone();
+            // A part the gold patch reaches may draw either map: its passes cover both maps' alphas.
+            if part.gold {
+                let (gold, gold_alpha) = self.metal_images.entry(TEX_GOLD).or_insert_with(|| metal_image(level, TEX_GOLD, images)).clone();
+                texel_alpha = texel_alpha.union(gold_alpha);
+                self.gold.entry((slot, class.o_class)).or_insert_with(|| GoldParts { ents: Vec::new(), own: image.clone(), gold, on: false });
+            }
             for pass in metal_passes(texel_alpha) {
                 let pass = if self.cache.ordered { ordered_pass(pass) } else { pass };
                 let mat = MobyMetalMaterial {
@@ -1978,6 +2038,7 @@ impl ExtraMobys {
                 if let Some(t) = &tracked { ec.insert(t.clone()); }
                 if pass.state().display { ec.insert(crate::display_blend::DisplayEffect); }
                 let e = ec.id();
+                if part.gold { if let Some(g) = self.gold.get_mut(&(slot, class.o_class)) { g.ents.push(e); } }
                 commands.queue(move |world: &mut World| {
                     let h = world.resource_mut::<Assets<MobyMetalMaterial>>().add(mat);
                     if let Ok(mut ent) = world.get_entity_mut(e) { ent.insert(MeshMaterial3d(h)); }

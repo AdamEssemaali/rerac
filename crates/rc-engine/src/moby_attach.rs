@@ -130,6 +130,9 @@ struct Item {
     /// Its glow word +0x90 when the game writes one (Clank's pulse, `Back::clank_color`) and the one last uploaded.
     glow: Option<u32>,
     glow_written: Option<u32>,
+    /// A gold weapon's class ([`ExtraMobys::set_gold`]) and the look last given to its metal.
+    gold: bool,
+    gold_written: Option<bool>,
     /// Its class joint lists 0 / 1's chains (the hero's glow sprites sit at their points, `rc_game::hero::glow`).
     lists: [Vec<u8>; 2],
 }
@@ -380,7 +383,7 @@ fn build(
         let scale = class.class.header.scale * if attach.slot == Slot::Antenna { 1.3 } else { 1.0 };
         items.push(Item {
             name, o_class: class.o_class as i16, visible, shown: None, attach, anim: ac, state, snapshot, scale,
-            base: palette_len, slots, rows: [[0; 4]; 3], position: [0.0; 3], entities: Vec::new(), mods: Vec::new(), glow: None, glow_written: None, lists,
+            base: palette_len, slots, rows: [[0; 4]; 3], position: [0.0; 3], entities: Vec::new(), mods: Vec::new(), glow: None, glow_written: None, gold: false, gold_written: None, lists,
         });
         palette_len += slots;
         geometry.push(class);
@@ -590,8 +593,13 @@ fn update(attach: Option<ResMut<MobyAttach>>, anim: Option<Res<MobyAnim>>, level
             let gl = &p.game.hero.glow;
             (gl.hand_id == p.game.hero.items.slot.id).then_some(gl.hand_word).flatten()
         });
+        // A gold weapon's metal shines with the level's gold map (`select_world_object_resource_tables`, loading the class
+        // when it comes into the hand). [L] The game decides it at that load and skips the class it loaded last; the
+        // flags are followed here as they are.
+        let gold = |o: i16| play.as_ref().is_some_and(|p| p.game.item_data.as_ref().is_some_and(|d| d.gold_class(&p.game.hero.weapons.gold, o as i32)));
         for item in a.items.iter_mut().filter(|i| i.attach.slot == Slot::Hand) {
             item.visible = hand_shows(item.o_class, h.as_ref(), fp, hand_off);
+            item.gold = gold(item.o_class);
             if let Some(m) = h.as_ref().filter(|m| m.o_class == item.o_class) {
                 item.state = m.anim;
                 item.snapshot = m.snapshot.clone();
@@ -650,6 +658,10 @@ fn upload(
         if let Some(g) = item.glow.filter(|&g| item.glow_written != Some(g)) {
             item.glow_written = Some(g);
             a.extra.set_glow(&mut commands, slot as u32, crate::moby_lod::glow_word(0x10, g));
+        }
+        if item.gold_written != Some(item.gold) {
+            item.gold_written = Some(item.gold);
+            a.extra.set_gold(&mut commands, slot as u32, item.o_class as i32, item.gold);
         }
         let at = item.base as usize * 64;
         for (k, b) in f.iter().take(item.slots as usize).flat_map(|r| r.iter().flatten().flat_map(|v| v.to_le_bytes())).enumerate() { palette[at + k] = b; }
