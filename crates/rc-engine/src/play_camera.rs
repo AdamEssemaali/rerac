@@ -19,6 +19,8 @@ pub struct PlayView {
     pub view: CameraView,
     /// tan(hfov/2): 0.63 (`InitViewContext`); the type-0 camera never writes it (player_controller.md §7).
     pub tan_half_fov: f32,
+    /// The view's far plane in integer units (`Services::view_far`): 745 472 unless a class moves it.
+    pub far: f32,
 }
 
 /// The Bevy transform of a game camera: eye = pos, looking along row 0 (forward) with row 2 (up) up.
@@ -42,6 +44,7 @@ pub fn apply(
         if *tf != t { *tf = t; }
         // The FOV hook: the game's tangent (Hor+ in 16:9, crate::display); only touched when it changes.
         crate::display::set_view_tans(&mut proj, view.tan_half_fov, aspect);
+        crate::game_camera::set_view_far(&mut proj, view.far);
     }
 }
 

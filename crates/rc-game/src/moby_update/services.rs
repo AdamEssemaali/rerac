@@ -925,6 +925,10 @@ pub struct Services {
     /// level load; a class that writes it calls `UpdateViewContext` (Gemlik's ship 69's speed FOV); the engine's
     /// projection follows it.
     pub view_tan_x: f32,
+    /// The view's far plane in integer units (level01 0x16cf64, level17 0x16d3e4): `InitViewContext`'s 745 472 (728
+    /// units) at the level load; the Fleet's backdrop 1772 sets 8 192 000 every draw (`units::fleet_sky`), and
+    /// `UpdateViewContext` builds the next frame's projection and frustum from it. The engine's projection follows it.
+    pub view_far: f32,
     /// The help / hint message system (`Help_Request` 0x225818, `Help_Update` 0x225bd0, the records and the log:
     /// [`crate::help`]); the classes request through it, the engine runs its update after the tick.
     pub help: crate::help::Help,
@@ -1012,6 +1016,7 @@ impl Services {
             vehicle: Default::default(),
             occlusion_fallback: None,
             view_tan_x: 0.63,
+            view_far: 745_472.0,
         }
     }
 

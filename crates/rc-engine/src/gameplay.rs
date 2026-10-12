@@ -1500,7 +1500,7 @@ fn setup(
         rng0.state, game.rng.state, game.counter, svc.groups.lists.iter().flatten().count(), emitters.len(),
         if svc.water.sim.is_some() { "initialised on the game stream" } else { "none" }, dynamic.pal_slots
     );
-    commands.insert_resource(PlayView { view: game.camera.out, tan_half_fov: play_camera::GAME_TAN_HALF_FOV });
+    commands.insert_resource(PlayView { view: game.camera.out, tan_half_fov: play_camera::GAME_TAN_HALF_FOV, far: crate::game_camera::FAR });
     let mut play = Play {
         game,
         ratchet,
@@ -2502,6 +2502,7 @@ fn tick(
         v.view = p.game.camera.out;
         // 0x16cf70 as the tick's classes left it (`InitViewContext`'s 0.63 unless a vehicle changed it).
         v.tan_half_fov = p.svc.view_tan_x;
+        v.far = p.svc.view_far;
     }
     if let Some(s) = session.as_mut() { s.0.hp = p.game.hero.health; }
     // The HUD's weapon slot (0x24f9c0): the held item 0x140408 when it has an ammo HUD and the hero is on foot.

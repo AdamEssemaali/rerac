@@ -14,7 +14,7 @@
 //! `RC_LOD_TINT=1` tints LOD 1 red, LOD 2 blue and the clipping path green; `RC_NOVSYNC=1` presents without
 //! vsync so `fps:` measures headroom.
 
-use crate::game_camera::{self, LevelFog, NEAR, FAR, UNITS};
+use crate::game_camera::{self, LevelFog, NEAR, UNITS};
 use crate::level_load::LoadedLevel;
 use anyhow::{Context, Result};
 use bevy::asset::RenderAssetUsages;
@@ -235,7 +235,7 @@ fn clip_flags(c: Vec4) -> u32 {
 /// * cull if `512000 − near < 0` (0x160ec0, set by the level init 0x1e9b10) or `n − far ≥ 0`, or the sphere is wholly
 ///   outside a side plane: `tan·z − |x| + r·k < 0` (x and y; `tan` = 0x18cdb0/4, `k` = 0x18cee0/4 = 1/cos(atan tan));
 /// * the sphere is wholly inside when `tan·z − |x| − r·k ≥ 0` (x and y), `far < f` and `near ≥ n`
-///   (vf27 = 0x18cef0 = (f, n)): then the LOD rule (`Tfrag::draw_mode`);
+///   (vf27 = 0x18cef0 = (f, n), f the view context's far plane: [`game_camera::projection_far`]): then the LOD rule (`Tfrag::draw_mode`);
 /// * otherwise the 8 box corners are transformed by 0x187040 (the view frustum as a clip volume, w = z/n) and
 ///   CLIP-tested twice, unscaled and with xy × 0.25 (0x160e60, i.e. the 4× guard band): all corners outside
 ///   one unscaled plane = cull; any corner outside the scaled volume = clipping path (VU1 0x107028, LOD 0, no
@@ -243,7 +243,7 @@ fn clip_flags(c: Vec4) -> u32 {
 ///
 /// The occlusion test (hdr 0x3a/0x3b against the mask copy at 0x70003b00, level01 0x2a80b8..0x2a80e4) runs
 /// before this, in `update_tfrag_modes`; an occluded tfrag never reaches these tests.
-fn tfrag_proc(info: &TfragCullInfo, t: &Tfrag, cam: Vec3, rows: [Vec3; 3], thresholds: [i32; 3], tans: (f32, f32)) -> u32 {
+fn tfrag_proc(info: &TfragCullInfo, t: &Tfrag, cam: Vec3, rows: [Vec3; 3], thresholds: [i32; 3], tans: (f32, f32), f: f32) -> u32 {
     let (tx, ty) = tans;
     let (kx, ky) = ((1.0 + tx * tx).sqrt(), (1.0 + ty * ty).sqrt());
     let [sx, sy, sz, r] = info.sphere;
@@ -253,10 +253,10 @@ fn tfrag_proc(info: &TfragCullInfo, t: &Tfrag, cam: Vec3, rows: [Vec3; 3], thres
     if 512000.0 - near < 0.0 || NEAR - far >= 0.0 { return MODE_CULLED; }
     let (ax, ay) = (p.x.abs(), p.y.abs());
     if tx * p.z - (ax - r * kx) < 0.0 || ty * p.z - (ay - r * ky) < 0.0 { return MODE_CULLED; }
-    let inside = tx * p.z - (ax + r * kx) >= 0.0 && ty * p.z - (ay + r * ky) >= 0.0 && far - FAR < 0.0 && near - NEAR >= 0.0;
+    let inside = tx * p.z - (ax + r * kx) >= 0.0 && ty * p.z - (ay + r * ky) >= 0.0 && far - f < 0.0 && near - NEAR >= 0.0;
     if !inside {
         let (mut all_out, mut any_guard) = (0x3fu32, 0u32);
-        let (a, b) = ((FAR + NEAR) / (NEAR * (FAR - NEAR)), (NEAR * -2.0 * FAR) / (NEAR * (FAR - NEAR)));
+        let (a, b) = ((f + NEAR) / (NEAR * (f - NEAR)), (NEAR * -2.0 * f) / (NEAR * (f - NEAR)));
         for c in &info.corners {
             let d = *c - cam;
             let v = Vec3::new(rows[0].dot(d), rows[1].dot(d), rows[2].dot(d));
@@ -284,6 +284,7 @@ fn update_tfrag_modes(
     let thresholds = if scale == 1.0 { state.thresholds } else { state.block.lod_distances().map(|d| (d * scale * 1024.0) as i32) };
     // `UpdateViewContext`'s planes (0x18cdb0 / 0x18cee0) from the view's tangent: a flown ship widens it.
     let tans = game_camera::projection_tans(proj);
+    let far = game_camera::projection_far(proj);
     let (eye, [fwd, left, up]) = (game_camera::game_eye(cam), game_camera::game_rows(cam));
     let rows = [-left, -up, fwd];
     let cam_raw = eye * UNITS;
@@ -302,7 +303,7 @@ fn update_tfrag_modes(
                 hist[0] += 1;
                 return MODE_CULLED;
             }
-            let mut m = tfrag_proc(info, t, cam_raw, rows, thresholds, tans);
+            let mut m = tfrag_proc(info, t, cam_raw, rows, thresholds, tans, far);
             if state.force_lod0 && m != MODE_CULLED { m = 0x14; }
             hist[match m { 0 => 0, 2 => 1, 6 => 2, 8 => 3, 0xa => 4, 0xe => 5, 0x10 => 6, _ => 7 }] += 1;
             m
@@ -365,7 +366,7 @@ mod tests {
         let m = |info: TfragCullInfo| {
             let mut t = Tfrag::default();
             t.header.bsphere = info.sphere;
-            tfrag_proc(&info, &t, Vec3::ZERO, rows, th, crate::game_camera::default_tans())
+            tfrag_proc(&info, &t, Vec3::ZERO, rows, th, crate::game_camera::default_tans(), crate::game_camera::FAR)
         };
         assert_eq!(m(at(20.0, 0.0, 4.0)), 0x14);   // far 24 < D2 = 30
         assert_eq!(m(at(40.0, 0.0, 4.0)), 0x10);

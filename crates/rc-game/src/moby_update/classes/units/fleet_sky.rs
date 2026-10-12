@@ -1,20 +1,20 @@
 //! **The Fleet's space backdrop, class 1772** (level17 `0x2f3848`, draw `0x2f32f0`; census U617). It owns the level's
 //! death height (0x15f638): 150 while Ratchet stands in its cuboid (+0x4c) on the fleet, 10 elsewhere and while he
 //! flies the ship 1379 (hero state 0x32); and it draws the sky: two long glowing lanes from its place out into space,
-//! and five huge slowly turning, slowly breathing nebula squares 1000 units off. The animation tables are the level's
+//! and five huge slowly turning, slowly breathing nebula squares 1000 units past the lanes' far end. The animation tables are the level's
 //! own statics (shared by every 1772; the overlay's data, fresh on each load). Read from the level17 decomp; native `f32`.
 //!
-//! **Pvar block**: +0x00 the lanes' near end (the placed point; its y forced to −500 by each draw), +0x10 their far
-//! end, +0x28 the far end's half width, +0x44 the second leg's heading, +0x4c the cuboid.
+//! **Pvar block**: +0x00 the lanes' near end (the placed point), +0x10 their far end (its y forced to −8000 by each
+//! draw), +0x28 the far end's half width, +0x44 the second leg's heading, +0x4c the cuboid.
 //!
 //! | address | what | port |
 //! |---|---|---|
 //! | `0x2f3848` | +0x4c ≠ −1: death height 10.0 when hero state 0x32 with vehicle (0x140940) class 0x563 or Ratchet not in cuboid +0x4c, else 150.0 (gp−0x75c8 = 0x15f638) | [`update`] |
 //! | state 0 | the turn angles 0x1de0d0[i] = i·25; near = position; far = near + `0x25ce50`((25000 + 11500)/50, yaw +0x48, 0) + `0x25ce50`(11500/50, +0x44, 0) (gp−0x482c..−0x4828); far.x −= 300; update distance 0xff; → 1 | [`update`] |
 //! | else | the five breaths 0x1de040 += speed (0x1de070)·dir (0x1de058)·dt, bouncing off 0 / 1; the turns 0x1de0d0 += 0x1ddfe0·0.1·dt (`fast_add_rotations`); the lanes' scrolls 0x1de0a0 += (−0.5, −1) (gp−0x4840)·dt, wrapped into [0, 1); `RegisterDrawCallback(0x2f32f0)` | [`update`] |
-//! | `0x2f32f0` | TEST 0x513f1 (no z write) round the whole draw; the far draw distance 0x16d3e4 = 8 192 000 | n/a [L]: the effect quads write no depth; the renderer's own far plane |
-//! | | near.y = −500; two lanes k: e = near − far; a = unit((near − cam) × e)·(20, 10)[k] (0x1de0b8), b = unit((far − cam) × e)·+0x28; quad near ∓ a, far ∓ b; ST (−8, 0) (−8, 1) (8, 0) (8, 1) (0x1e6fa0) with s + scroll[k]; RGBA 0x807e4931 (gp−0x4848); FX 0xe (0x1de088); ALPHA 0x48; then scroll[k] += speed·dt (unwrapped) | [`frame`], [`fx_quad_groups`] |
-//! | | five squares i (FX 0x2f): side (3500, 4000, 2000, 3000, 3300) (0x1ddff8) centred on (near.x, near.y + 1000, near.z) in the x–z plane; ST ½ + ½·(sin, cos) of turn + (3π/2, π, 0, π/2); RGBA `FastTweenColor`(breath, 0x1de010, 0x1de028) | [`fx_quad_groups`] |
+//! | `0x2f32f0` | TEST 0x513f1 (no z write) round the whole draw; the view's far plane 0x16d3e4 = 8 192 000 (`UpdateViewContext` projects the next frames with it) | n/a [L]: the effect quads write no depth; [`frame`] (`Services::view_far`) |
+//! | | far.y = −8000 (+0x14 = 0xc5fa0000); two lanes k: e = near − far; a = unit((near − cam) × e)·(20, 10)[k] (0x1de0b8), b = unit((far − cam) × e)·+0x28; quad near ∓ a, far ∓ b; ST (−8, 0) (−8, 1) (8, 0) (8, 1) (0x1e6fa0) with s + scroll[k]; RGBA 0x807e4931 (gp−0x4848); FX 0xe (0x1de088); ALPHA 0x48; then scroll[k] += speed·dt (unwrapped) | [`frame`], [`fx_quad_groups`] |
+//! | | five squares i (FX 0x2f): side (3500, 4000, 2000, 3000, 3300) (0x1ddff8) centred on (far.x, far.y + 1000, far.z) in the x–z plane; ST ½ + ½·(sin, cos) of turn + (3π/2, π, 0, π/2); RGBA `FastTweenColor`(breath, 0x1de010, 0x1de028) | [`fx_quad_groups`] |
 
 use crate::moby_runtime::{MobyId, MobyTable};
 use crate::moby_update::classes::draw_callbacks::Callback;
@@ -121,10 +121,12 @@ pub fn update(w: &mut World, id: MobyId) {
     }
 }
 
-/// The state part of the draw `0x2f32f0`: near.y = −500, the camera, the scrolls used and then advanced.
+/// The state part of the draw `0x2f32f0`: the view's far plane, far.y = −8000, the camera, the scrolls used and then
+/// advanced.
 pub fn frame(w: &mut World, id: MobyId) {
     if w.m(id).pvars.len() < o::SIZE { return; }
-    c::set_pf(w, id, o::NEAR + 4, -500.0);
+    w.svc.view_far = 8_192_000.0;
+    c::set_pf(w, id, o::FAR + 4, -8000.0);
     let cam = crate::hero::physics::to_f32x3(w.camera);
     let sky = &mut w.svc.units.fleet_sky;
     sky.cam = cam;
@@ -165,7 +167,7 @@ pub fn fx_quad_groups(table: &MobyTable, svc: &Services, id: MobyId) -> Vec<FxQu
     }).collect();
     let squares = (0..5).map(|i| {
         let (s, h) = (SIDE[i], SIDE[i] * 0.5);
-        let (x0, y, z0) = (near[0] - h, near[1] + 1000.0, near[2] + h);
+        let (x0, y, z0) = (far[0] - h, far[1] + 1000.0, far[2] + h);
         let corners = [[x0, y, z0], [x0, y, z0 - s], [x0 + s, y, z0], [x0 + s, y, z0 - s]];
         let a = sky.turn[i];
         let st = [3.0 * std::f32::consts::FRAC_PI_2, std::f32::consts::PI, 0.0, std::f32::consts::FRAC_PI_2].map(|d| {

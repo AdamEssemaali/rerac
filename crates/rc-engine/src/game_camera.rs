@@ -151,6 +151,21 @@ pub fn projection_tans(p: Option<&Projection>) -> (f32, f32) {
     }
 }
 
+/// The far plane of a camera's projection in integer units (the game's 745 472 for any other projection).
+pub fn projection_far(p: Option<&Projection>) -> f32 {
+    match p {
+        Some(Projection::Custom(c)) => c.get::<GameProjection>().map_or(FAR, |g| g.far),
+        _ => FAR,
+    }
+}
+
+/// Sets `p`'s far plane (integer units, the view context's 0x16cf64) when it differs.
+pub fn set_view_far(p: &mut Projection, far: f32) {
+    let Projection::Custom(c) = p else { return };
+    let Some(g) = c.get_mut::<GameProjection>() else { return };
+    if g.far != far { g.far = far; }
+}
+
 /// The game's default tangents (x, y).
 #[cfg(test)]
 pub fn default_tans() -> (f32, f32) {
