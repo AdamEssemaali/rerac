@@ -555,7 +555,8 @@ impl HudState {
         HudState {
             assets,
             slots: [Slot::default(); SLOTS],
-            next_handle: 0,
+            // 0 is no handle (a refused request's answer, and every slot's before its first request).
+            next_handle: 1,
             show_all: false,
             health_anim: [0; 4],
             bolt_anim: 0,
@@ -1925,6 +1926,22 @@ mod tests {
         // `ShowBanner(msg, −1)` (Blarg's bridge, the skill points): ticks(180), not a countdown that never ends.
         h.show_banner(b"Kerwan", Some(-1));
         assert_eq!(h.banner.countdown, scale_ticks(180));
+    }
+
+    /// Qwark's meter (slot 1, flag 0x10) leaves on `FUN_0024b090(handle, 0)`: its flags cleared, the timer runs out. The
+    /// first request's handle was 0, every empty slot's too, so the flags went to slot 0 and the meter stayed up.
+    #[test]
+    fn boss_meter_flags_cleared_leaves() {
+        let mut h = HudState::new(assets());
+        let r = Request { slot: 1, flags: 0x10, icon: 0xffff, element: Element::Boss { key: 7 }, max: (120 << 4) | 0xf };
+        for t in 0..200 {
+            h.apply_calls(&[Call::Data(7, 1900 - t), Call::Queue(r)]);
+            h.tick(inputs(4, 0));
+        }
+        assert!(!h.tick(inputs(4, 0)).is_empty(), "the meter is up");
+        h.apply_calls(&[Call::Data(7, 0), Call::SetFlags(r, 0)]);
+        assert_eq!(h.slots[1].flags, 0);
+        assert!((0..2000).any(|_| h.tick(inputs(4, 0)).is_empty()), "the meter leaves");
     }
 
     /// A boss meter (slot 6, flag 0x10: its timer is kept up) leaves at once on `fun_001ff480`'s release; waiting for it
