@@ -672,7 +672,14 @@ fn menu_frame(
                 debug_step: false,
                 c5c4: 0,
             };
-            match rc_game::menus::mode::in_level_trigger(&t) {
+            // A scene or movie this tick started (a talker's hand-off, a class's `DialogStreamStart` / `StartPssMovie`) has
+            // left mode 0 in the game already (0x15f5c4 = 2 / 1 inside the moby loop), so the pause tests, which run in
+            // mode 0 only, do not fire; the port's scene and movie players take the request a frame later. Opening the
+            // menu then let the scene start over it, the menu never closed and kept the level's map state (Oltanis's
+            // infobot: the Start that skipped the movie also opened the pause menu).
+            let media_pending = play.svc.interact.handoffs.iter().any(|h| matches!(h, rc_game::moby_update::interact::Handoff::Scene { .. } | rc_game::moby_update::interact::Handoff::Movie { .. }))
+                || play.svc.cinematic.requests.iter().any(|r| matches!(r, rc_game::cinematic::EngineRequest::StartScene { .. } | rc_game::cinematic::EngineRequest::StartMovie { .. } | rc_game::cinematic::EngineRequest::MovieB { .. }));
+            match rc_game::menus::mode::in_level_trigger(&t).filter(|_| !media_pending) {
                 Some(rc_game::menus::mode::Trigger::Menu(k)) if rt.menu.is_some() => open_menu(rt, &mut mm, &mut play, gs, audio.as_deref_mut(), k, frame),
                 Some(rc_game::menus::mode::Trigger::Freeze(k)) => open_freeze(rt, &mut mm, &mut play, audio.as_deref_mut(), k, 0, frame),
                 _ => {}
