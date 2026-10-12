@@ -754,7 +754,8 @@ pub fn break_piece_with(w: &mut World, parent: MobyId, class: i16, p: V, rot: V,
 /// `FxGroupUpdate` 0x30cd18: state 1 flies (spin about the sphere centre, gravity, bounce off the world keeping the
 /// speed, the spin re-aimed about `vel × n`) until the timer runs out, then state 2 explodes
 /// (`SpawnBeamExplosion(0, 0, r, r/2, 9, r/2, 0, piece, pos, 5, 3, 5, −1, 0, 0)`, or `0x2742a8` with flag 2) and is
-/// deleted, or state 3 (flag 1) fades its alpha over `scale(10)` ticks while still flying.
+/// deleted, or state 3 (flag 1) fades its alpha over `scale(10)` ticks while still flying; state 0 is deleted, the
+/// states above 3 fly.
 pub fn piece_update(w: &mut World, id: MobyId) {
     let st = w.m(id).state;
     match st {
@@ -789,8 +790,13 @@ pub fn piece_update(w: &mut World, id: MobyId) {
             let a = ((super::pi32(w, id, 0x30) as f32 / d) * 128.0) as i32;
             w.mm(id).alpha = a as u8;
         }
-        0 => {}
-        _ => return,
+        // State 0 (a moby of a piece class not made by `BreakFxB`, which starts its pieces in 1): deleted at once. The
+        // remains of Blarg's breakables (1656, 1661, 1665) run this update on level 6, so those breaks leave nothing.
+        0 => {
+            w.delete_moby(id);
+            return;
+        }
+        _ => {}
     }
     fly(w, id);
 }

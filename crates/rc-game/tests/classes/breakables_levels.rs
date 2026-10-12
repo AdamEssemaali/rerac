@@ -304,7 +304,18 @@ fn every_placed_breakable_breaks_on_its_level() {
                 let got_p: usize = pieces.iter().map(|&c| sim.count(c)).sum::<usize>() - p0;
                 let min_p: usize = r.pieces.iter().map(|x| match *x { Piece::Single(_) => 1, Piece::Ring4(_) => 4, Piece::Burst { na, .. } => na as usize }).sum();
                 assert!(got_p >= min_p, "level {level:02} class {oc}: {got_p} pieces, at least {min_p}");
-                if let Some(c) = rem { assert!(sim.count(c) > r0 || c == oc, "level {level:02} class {oc}: remains {c}"); }
+                // Remains whose class runs `FxGroupUpdate` (Blarg's 1656 / 1661 / 1665) are deleted by their first update
+                // (its state 0, the tick after the break): those breaks leave nothing.
+                if let Some(c) = rem {
+                    if p.get(c) == Some(ClassUpdate::FxPiece) {
+                        assert!(sim.count(c) > r0, "level {level:02} class {oc}: remains {c} made");
+                        let at = sim.game.hero.pos.map(|v| v.to_f32());
+                        sim.tick([at[0] + 3.0, at[1], at[2] + 2.0]);
+                        assert_eq!(sim.count(c), r0, "level {level:02} class {oc}: remains {c} gone");
+                    } else {
+                        assert!(sim.count(c) > r0 || c == oc, "level {level:02} class {oc}: remains {c}");
+                    }
+                }
                 let got_b = sim.bolts() - b0;
                 assert!(got_b > 0, "level {level:02} class {oc}: bolts");
                 if let (true, Some(k)) = (r.keep_broken, k.filter(|&k| lv.instances[k].spawn_flags & 3 == 0 && lv.instances[k].spawn_flags & 0xc != 0)) {
