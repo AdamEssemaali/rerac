@@ -108,7 +108,8 @@ pub struct ShipGlobals {
     /// 0x13e090 / 0x13e0a0: where the landing scene's end puts Ratchet (`HeroTeleport`): his position and rotation
     /// after `HeroInit` 0x226b70 (unless the level-13 adopted ship's fixed spot, 0x160540).
     pub landing_spot: Option<([f32; 4], [f32; 4])>,
-    /// 0x160540: the placed ship of level 13 was adopted (`0x2a2360`; not ported: G-LVL-002).
+    /// 0x160540: a placed ship was adopted (`0x2a2360`: [`ship::adopt`]); never cleared, so the engine keeps it for the
+    /// session (the level-13 loads with ship 2 adopt the placed 533 again).
     pub adopted: bool,
     /// 0x13e050: the mode-6 substate (0 take-off, 8 landing, 3 fly-away, 4 the flight), mirrored by [`space`] for the
     /// moby loop's readers (the shadow's fade).

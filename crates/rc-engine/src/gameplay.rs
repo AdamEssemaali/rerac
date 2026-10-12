@@ -1261,8 +1261,10 @@ fn setup(
         ship: crate::moby_spawn::ship_index_for(level_index) as i16,
         setup: rc_game::travel::FlyAwaySetup::parse(&lv.gameplay),
         landing_spot: Some(landing_spot),
+        adopted: crate::level_load::ship_adopted(),
         ..Default::default()
     };
+    adopt_placed_ship(&mut game.mobys, &mut svc.travel, &classes, level_index);
     // The help system (rc_game::help): the level text and small font it sizes with, the help log's id table.
     help_setup(&mut svc, lv, level_index);
     // The map system's level entry (rc_game::map, FUN_0025a4c0): tables, the level's map file, its fog mask.
@@ -1771,6 +1773,8 @@ fn death_reload(p: &mut Play, lv: &crate::level_load::LoadedLevel, state: Option
     // 0x13e030: the loader's new ship (`ShipUpdate` runs on it alone: its glass, its hatch prompt). The compacted table
     // moves its id once a placed moby is gone; the old id left the ship without its update after a death.
     p.svc.travel.moby = ship_id;
+    let classes = p.classes.clone();
+    adopt_placed_ship(&mut p.game.mobys, &mut p.svc.travel, &classes, p.level);
     p.moby_to_instance = statics.moby_to_instance.clone();
     let n_static = p.game.mobys.first_dynamic;
     let mut driven: Vec<(MobyId, usize, Option<usize>)> = (0..n_static)
@@ -1989,6 +1993,21 @@ fn debug_dump(
             m.o_class, m.state, m.mode, m.has_collision, m.position[0], m.position[1], m.position[2], d
         );
     }
+}
+
+/// `InitLevelRenderGlobals` 0x255958 on level 13 with ship 2 and 0x160540 set: the placed ship of class `0x160550` (ship 2's
+/// 533) is adopted (`0x2a2360`: `rc_game::travel::ship::adopt_table`) and cut to sequence 1 (`hard_cut(m, 1, 0)`), in place of
+/// the ship the loader would create (crate::moby_spawn creates none then).
+fn adopt_placed_ship(table: &mut MobyTable, travel: &mut rc_game::travel::ShipGlobals, classes: &ClassTable, level: u32) {
+    use rc_game::moby_update::services::ClassData;
+    const PLACED: i16 = 533;
+    if level != 13 || travel.ship != 2 || !travel.adopted { return; }
+    let Some(id) = table.mobys.iter().position(|m| m.o_class == PLACED && m.state < 0xfd) else { return };
+    let coll = classes.info(PLACED).is_some_and(|i| i.has_collision);
+    rc_game::travel::ship::adopt_table(table, travel, level, id, coll);
+    let a = &mut table.mobys[id].anim;
+    (a.seq_a, a.seq_b, a.frame_a, a.frame_b, a.t) = (1, 1, 0, 0, 0.0);
+    println!("gameplay: level 13 with ship 2 after the escape: the placed ship 533 (moby {id}) adopted");
 }
 
 /// The entities of instances a death reload made spawn (their level load had hidden them: `SpawnHidden`).
@@ -2496,6 +2515,8 @@ fn tick(
     }
 
     publish_anim(p, anim.as_deref_mut());
+    // 0x160540 (a placed ship adopted: Gemlik's 533 after the escape) holds for the session.
+    if p.svc.travel.adopted && !crate::level_load::ship_adopted() { crate::level_load::set_ship_adopted(); }
     let hm = &p.game.mobys.mobys[p.hero_id];
     if let Some(a) = attach.as_mut() { a.set_host(rows_bits(&hm.rows), [hm.position[0], hm.position[1], hm.position[2]]); }
     if let Some(v) = view.as_mut() {

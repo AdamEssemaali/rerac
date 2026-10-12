@@ -104,6 +104,13 @@ pub fn set_ship(ship: i16) { SHIP.store(ship.clamp(0, 2) as i32, std::sync::atom
 
 static SHIP: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
 
+/// 0x160540: a placed ship was adopted (`rc_game::travel::ship::adopt`, Gemlik's 533 after the escape). The game never
+/// clears it: it holds for the session (not in the save).
+pub fn ship_adopted() -> bool { SHIP_ADOPTED.load(std::sync::atomic::Ordering::Relaxed) }
+pub fn set_ship_adopted() { SHIP_ADOPTED.store(true, std::sync::atomic::Ordering::Relaxed); }
+
+static SHIP_ADOPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// A per-level cache (one `OnceLock` per level index: the level-keyed tables built from the loaded level's overlay).
 pub type PerLevel<T> = [std::sync::OnceLock<T>; 20];
 

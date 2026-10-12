@@ -11,7 +11,7 @@
 //! | 0x2a1c6c | drawn (+0x31): +0xbc += 2; glow +0x90 = `v | v<<8 | v<<16`, v = `(int)(fast_cos((+0xbc − 0x80)·2π/256)·50) + 0x96` (533: red `v >> 1`); `RegisterDrawCallback2(0x2a70a8)` (the glass); xy distance to the camera 0x167240 < 32 → `RegisterDrawCallback(0x2a2130)` (the shadow) | [`update`] (`fast_cos` as `f32::cos` [L]) |
 //! | 0x2a1d44 | the hatch flag (pvar +0xc, s16): off → on when the hero (0x13f3d0) is within xy 6 of the ship and within 4 (3-D) of the hatch `rows·0x1bdd00[ship] + pos`; on → off beyond 4.1; mode bit 1 (hidden) → off | [`update`] |
 //! | 0x2a1e54 | flag on: `try_set_help_message(2, 0x53e4)` ("△ Enter ship"); △ (0x13cae4 & 0x10) with the lease: level 10 with the hero in the Clank body (0x1413f4 == 1) → state 0x2a, mode \|= 0x41, `DialogStreamStart(9)`; else `PromptRelease(2)` (Lombyte `OpenShipMenu`), 0x15f630 = 1, 0x13e058 = 0 | [`update`] (`Interact::try_prompt`, `Prompt::release`) |
-//! | 0x2a2360 | the level-13 adoption of the placed ship 533 (0x160540, the fixed landing spot 0x13e090) | NOT ported (G-LVL-002) |
+//! | 0x2a2360 (level13 `0x298cb0`) | the adoption of a placed ship: 0x160540 = 1; the current ship hidden (`0x2a2450`); level 13: the landing spot 0x13e090 = (464.66, 580.68, 316.72), yaw 0x13e0a8 = 2.77; 0x13e056 = class − 0x213; 0x13e030 = it, +0x74 = `ShipUpdate`, mode &= ~3, +0x94 (collision) = class +0x10; `fun_00212ed8(m, 1, 0)`; 0x13e060..0x13e068 = its pvar words 0..2 (the fly-away set-up). Callers: Gemlik's director 1353 after the escape, and `InitLevelRenderGlobals` on level 13 with ship 2 and 0x160540 set (the placed class `0x160550` = ship 2's 533, instead of creating one) | [`adopt`], [`adopt_table`] |
 //! | 0x2a2450 / 0x2a2480 | ship mode \|= 3 / &= ~3, +0x94 (collision) 0 / class +0x10 | `cinematic::EngineRequest::ShipHidden` (existing) |
 //! | 0x2a2130 | the shadow: `fun_001fa820(32, bsphere/1024, &a)` (0x2222e8): `FastBSphereCheck(32, sphere)` 0x2221f0 ≥ 0 (not beyond 32 units of view depth, not behind, inside the side planes), then a = clamp(`vftoi0`(32·1024 − (c.z − r)·1024) >> 7, 0, 0x80) (the check's vf3.y: full up to 16 units of the sphere's near depth, 0 at 32); in the fly-away (mode 6, sub 3) past `ticks(150)`: a −= (tick − 150)·4, nothing at ≤ 0; one `FastDrawQuadReal`, FX 0, ALPHA 0x44, corners `rows·0x1bdd50[ship][k] + bsphere/1024` at z = the ship's z + 0.1 (mode 6: `GroundHeight(0.5, pos, 0)` + 0.1), RGBA `(a >> 1) << 24 \| 0x808080`, ST 0x1bdd30 | [`shadow_quads`] (the view: the last drawn frame's `BSphereView`; without one, a linear fade over the 32 units [L]) |
 //! | 0x2a2ab8 | the flames: per flame i < `gp−0x6680[ship]` (8 / 2 / 2): intensity = +0xbc + (+0xb2 ≠ 0 ? `randi(+0xb2)` : 0) (drawn at render time: the rand is the frame's), RGBA `intensity << 24 \| (533 ? 0x308000 : 0x2058b0)`, corners `rows·(c_k·intensity·size/40 + p_i) + bsphere/1024` (p_i, size = table 0x1bde30 / 0x1bdeb0 / 0x1bded0 by ship, c_k = 0x1bdef0), FX 5, ALPHA 0x48, ST 0x1bde10 | [`flame_quads`] (the rand in `draw_callbacks::run_frame`) |
@@ -393,4 +393,68 @@ pub fn set_hidden(table: &mut MobyTable, g: &ShipGlobals, hidden: bool) {
     let Some(m) = g.moby.and_then(|id| table.mobys.get_mut(id)) else { return };
     if hidden { m.mode |= 3 } else { m.mode &= !3 }
     m.has_collision = !hidden;
+}
+
+/// The landing spot `0x2a2360` sets on level 13 (0x13e090 / 0x13e0a8).
+pub const GEMLIK_LANDING: [f32; 3] = [f32::from_bits(0x43e8_547b), f32::from_bits(0x4411_2b85), f32::from_bits(0x439e_5c29)];
+pub const GEMLIK_LANDING_YAW: f32 = f32::from_bits(0x4031_47ae);
+/// Ship 0's class (0x213): the index is the class minus it.
+const FIRST_SHIP_CLASS: i16 = 0x213;
+
+/// `0x2a2360` without its sequence cut (module table): moby `id`, a placed ship of `level`, becomes the ship
+/// (`has_collision`: its class has collision, +0x94 = class +0x10). The loader calls it as it builds the table; [`adopt`]
+/// in a tick.
+pub fn adopt_table(table: &mut MobyTable, travel: &mut ShipGlobals, level: u32, id: MobyId, has_collision: bool) {
+    travel.adopted = true;
+    // `0x2a2450`: the current ship hidden and without collision.
+    if let Some(old) = travel.moby.filter(|&o| o != id && o < table.mobys.len()) {
+        let m = &mut table.mobys[old];
+        m.mode |= 3;
+        m.has_collision = false;
+    }
+    if level == 13 {
+        travel.landing_spot = Some(([GEMLIK_LANDING[0], GEMLIK_LANDING[1], GEMLIK_LANDING[2], 0.0], [0.0, 0.0, GEMLIK_LANDING_YAW, 0.0]));
+    }
+    let Some(m) = table.mobys.get_mut(id) else { return };
+    travel.ship = m.o_class - FIRST_SHIP_CLASS;
+    travel.moby = Some(id);
+    m.mode &= !3;
+    m.has_collision = has_collision;
+    let word = |k: usize| m.pvars.get(4 * k..4 * k + 4).map_or(-1, |b| i32::from_le_bytes(b.try_into().unwrap()));
+    travel.setup = super::FlyAwaySetup { path: word(0), cam_a: word(1), cam_b: word(2) };
+}
+
+/// `0x2a2360` in a tick (module table): [`adopt_table`], then `fun_00212ed8(m, 1, 0)`.
+pub fn adopt(w: &mut World, id: MobyId) {
+    let coll = crate::moby_update::classes::units::class_collision(w, w.m(id).o_class);
+    let level = w.svc.level;
+    adopt_table(w.table, &mut w.svc.travel, level, id, coll);
+    crate::moby_update::creature::hard_cut(w, id, 1, 0);
+}
+
+#[cfg(test)]
+mod adopt_tests {
+    use super::*;
+    use crate::moby_runtime::{ClassInfo, Moby};
+
+    /// `0x2a2360` on Gemlik: the loader's ship hidden without collision; the placed 533 is the ship (index 2), shown,
+    /// with its collision and its pvar fly-away set-up; the landing spot is the fixed one; 0x160540 set.
+    #[test]
+    fn a_placed_ship_is_adopted() {
+        let info = ClassInfo { scale: 1.0, ..Default::default() };
+        let old = Moby::init_instance(0, 532, Some(&info));
+        let mut placed = Moby::init_instance(1, 533, Some(&info));
+        placed.mode |= 3;
+        placed.pvars = [7i32, 8, 9].iter().flat_map(|v| v.to_le_bytes()).collect();
+        let mut table = MobyTable::new(vec![old, placed], 1);
+        let mut g = ShipGlobals { moby: Some(0), ship: 1, ..Default::default() };
+        adopt_table(&mut table, &mut g, 13, 1, true);
+        assert!(g.adopted);
+        assert_eq!((g.moby, g.ship), (Some(1), 2));
+        assert_eq!((table.mobys[0].mode & 3, table.mobys[0].has_collision), (3, false));
+        assert_eq!((table.mobys[1].mode & 3, table.mobys[1].has_collision), (0, true));
+        assert_eq!((g.setup.path, g.setup.cam_a, g.setup.cam_b), (7, 8, 9));
+        let (p, r) = g.landing_spot.unwrap();
+        assert_eq!(([p[0], p[1], p[2]], r[2]), (GEMLIK_LANDING, GEMLIK_LANDING_YAW));
+    }
 }

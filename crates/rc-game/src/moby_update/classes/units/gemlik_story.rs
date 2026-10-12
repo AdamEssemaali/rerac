@@ -19,7 +19,7 @@
 //! | state 7 | flag 0x13d3ee set → 0xc; P[5] = −1 → 0xd; the creature (class 0x184) alive → wait; else: the vehicle mode \|= 2, `HeroTeleport(cuboid P[2], 0x72, 1)`, flag set, the ship P[8] hidden, `MusicRequestTrack(0, 5)`, → 8, `DialogStreamStart(2)` | [`update`] |
 //! | state 8 | game mode ≠ 2: → 9, `DialogStreamUpdate(14)` | [`update`] |
 //! | state 9 | game mode ≠ 2: `DialogStreamStart(3)`, → 10 | [`update`] |
-//! | state 10 | game mode ≠ 2: the vehicle mode &= ~2; `UnlockPlanet(14)`; the ship P[8] shown and adopted (`0x298cb0` = level01 `0x2a2360`), the landing spot 0x13e090 = (464.66, 580.68, 316.72), yaw 0x13e0a8 = 2.77; the letterbox off; → 0xb | [`update`] (`ShipGlobals::landing_spot`); the adoption: NOT ported (G-LVL-002) |
+//! | state 10 | game mode ≠ 2: the vehicle mode &= ~2; `UnlockPlanet(14)`; the ship P[8] shown and adopted (`0x298cb0` = level01 `0x2a2360`), the landing spot 0x13e090 = (464.66, 580.68, 316.72), yaw 0x13e0a8 = 2.77; the letterbox off; → 0xb | [`update`] (`ShipGlobals::landing_spot`, `travel::ship::adopt`) |
 //! | state 0xb | the vehicle (class 0x45) alive → wait; else `memcard_Save`, → 0xc (P[4] = −1: → 0xc at once) | [`update`] |
 //! | state 0xc | → 0xd | [`update`] |
 //! | state 0xd | P[4] = −1 → `DeleteMoby`; the vehicle's mission loaded done (0x15fc88[+0xb0] = −1): the ship P[8] deleted, → 0xe | [`update`] (`MissionState::mission_slot`) |
@@ -133,7 +133,7 @@ pub fn update(w: &mut World, id: MobyId) {
             crate::cinematic::unlock_planet(w, 0xe);
             if let Some(s) = moby(w, id, 8) {
                 w.mm(s).mode &= !(mode::HIDDEN | mode::NO_ANIM);
-                w.svc.unported("gemlik 1353: the placed ship's adoption 0x2a2360 (G-LVL-002)");
+                crate::travel::ship::adopt(w, s);
                 w.svc.travel.landing_spot = Some(([LANDING[0], LANDING[1], LANDING[2], 0.0], [0.0, 0.0, LANDING_YAW, 0.0]));
             }
             crate::cinematic::letterbox(w, false);
