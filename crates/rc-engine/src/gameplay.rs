@@ -945,7 +945,9 @@ fn class_joint_data_where(lv: &crate::level_load::LoadedLevel, want: impl Fn(i16
     let core = rc_formats::level::parse_level_core(&read("core_index.bin")?, data.len()).context("parsing core index")?;
     for c in wanted {
         let name = format!("moby_class/{:04}", c.o_class);
-        let blk = core.blocks.iter().find(|b| b.name == name).ok_or_else(|| anyhow!("no {name} block"))?;
+        // A class appended from the spaceships file (the loader's ship) has no block in the core: its lists come from
+        // that file (crate::travel_render::ship_joint_lists).
+        let Some(blk) = core.blocks.iter().find(|b| b.name == name) else { continue };
         let blob = data.get(blk.offset..blk.offset + blk.size).ok_or_else(|| anyhow!("{name} out of range"))?;
         let lists = (0..256).map_while(|l| rc_formats::gadget::joint_list(blob, &c.class.header, l).ok()).collect();
         out.insert(c.o_class as i16, lists);
@@ -1997,8 +1999,8 @@ fn debug_dump(
         if d > radius { continue; }
         let (sv, st) = visible.get(&(id as u32)).copied().unwrap_or((0, 0));
         println!(
-            "dump:   moby {id:4} class {:5} state {:#04x} mode {:#06x} coll {} pos ({:.2}, {:.2}, {:.2}) dist {:.1} meshes {sv}/{st} visible (+0x31 {} alpha {:#04x} draw dist {} occlusion {:#06x})",
-            m.o_class, m.state, m.mode, m.has_collision, m.position[0], m.position[1], m.position[2], d, m.visible, m.alpha, m.draw_dist, m.occlusion
+            "dump:   moby {id:4} class {:5} state {:#04x} mode {:#06x} coll {} pos ({:.2}, {:.2}, {:.2}) scale {:.4} dist {:.1} meshes {sv}/{st} visible (+0x31 {} alpha {:#04x} draw dist {} occlusion {:#06x})",
+            m.o_class, m.state, m.mode, m.has_collision, m.position[0], m.position[1], m.position[2], m.scale, d, m.visible, m.alpha, m.draw_dist, m.occlusion
         );
     }
     // The ship (`ShipUpdate`'s moby 0x13e030): its glass registration and the joint-list-0 matrix the glass is drawn at.
@@ -2010,6 +2012,8 @@ fn debug_dump(
         let at = cbs.matrices.get(&id).map(|m| format!("({:.2}, {:.2}, {:.2})", m[3][0], m[3][1], m[3][2]));
         println!("dump: ship moby {id} class {o} ship {} adopted {} glass registered {glass} at {} joint lists {lists:?} engine ship {:?}", p.svc.travel.ship, p.svc.travel.adopted, at.unwrap_or_else(|| "-".into()), p.ship);
     }
+    let all: Vec<(i16, Option<usize>)> = rc_game::travel::ship::CLASSES.iter().map(|&c| (c, p.svc.joint_lists.get(&c).map(Vec::len))).collect();
+    println!("dump: ship classes' joint lists (class, lists): {all:?}");
 }
 
 /// `InitLevelRenderGlobals` 0x255958 on level 13 with ship 2 and 0x160540 set: the placed ship of class `0x160550` (ship 2's
