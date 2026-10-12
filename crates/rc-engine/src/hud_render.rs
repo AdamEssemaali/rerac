@@ -601,7 +601,8 @@ pub struct HudFeed {
     pub prompt_text: Vec<u8>,
     pub bolts_pinned: bool,
     pub weapon: Option<Option<(u16, i32, i32)>>,
-    /// Bumped by `FUN_0024fb00` callers (the vendor's open): every HUD slot is emptied at once.
+    /// Bumped by `FUN_0024fb00` callers (the vendor's open) and the death reload's `fun_001fee88`: every HUD slot is
+    /// emptied at once.
     pub reset: u32,
     /// `rc_game::moby_update::interact::Prompt::released`: the prompt's slot emptied at once on a change.
     pub prompt_released: u32,

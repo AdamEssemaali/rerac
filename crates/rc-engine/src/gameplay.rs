@@ -2080,7 +2080,7 @@ fn respawn(p: &mut Play, coll: &rc_formats::collision::Collision, class: &MobyAn
 }
 
 /// The tick's HUD weapon slot, the ammo table and the sound layer (one system parameter).
-type HudAudio<'w> = (Option<ResMut<'w, HeldWeapon>>, Option<Res<'w, AmmoTable>>, Option<ResMut<'w, crate::audio_out::AudioOut>>);
+type HudAudio<'w> = (Option<ResMut<'w, HeldWeapon>>, Option<Res<'w, AmmoTable>>, Option<ResMut<'w, crate::audio_out::AudioOut>>, Option<ResMut<'w, crate::hud_render::HudFeed>>);
 
 type MainCamera<'w, 's> = Query<'w, 's, &'static Transform, (With<Camera3d>, Without<crate::sky_render::SkyCamera>)>;
 
@@ -2103,7 +2103,7 @@ fn tick(
     mut session: Option<ResMut<Session>>,
     mut mode: Option<ResMut<crate::menu_render::MenuMode>>,
     mut occl: Option<ResMut<MobyOcclusion>>,
-    (mut held, ammo, mut audio): HudAudio,
+    (mut held, ammo, mut audio, mut hud_feed): HudAudio,
 ) {
     let Some(mut play) = play else { return };
     // Mode 5's world frames (crate::interact_render: substates 0 / 2) run one tick in the scene form.
@@ -2150,6 +2150,9 @@ fn tick(
         if checkpoint { rc_game::moby_update::visit::restore(&mut p.game.mobys, &p.svc.save.checkpoint_visit); }
         reload_load_pass(p, coll, particles.as_deref_mut(), state.as_deref().map(|s| s.0.global.vendor));
         if let Some(a) = audio.as_deref_mut() { a.system().death_reload(checkpoint); }
+        // The main loop's `fun_001fee88` after the reload (L01 0x259c40, as at the level's first load): every HUD slot
+        // emptied and hidden at once, so an element shown at the death (the oxygen meter of a drowning) does not linger.
+        if let Some(f) = hud_feed.as_deref_mut() { f.reset = f.reset.wrapping_add(1); }
         println!("gameplay: death reload done: respawned at {}", if checkpoint { "the checkpoint" } else { "the uid-0 moby" });
     }
 
