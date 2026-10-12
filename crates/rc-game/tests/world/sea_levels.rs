@@ -23,8 +23,9 @@ fn water_data(level: u32) -> LevelWaterData { crate::common::water_data(level).u
 /// The sea ports each level has (port indices into `PORTS`): the liquid grids on 03, 05, 07, 08, 09, 14, the ocean 1111
 /// on 11 and 16 (the same code), the Hoven liquid on 12; 07's 460 and 09's 317 run one function (port 2). The liquid
 /// mesh users (batch 5, `MeshSet`): 8 = Aridia's 854, 9 = Hoven's 293 strips, 10 = level 14's 1418, 11 = Novalis' 1848;
-/// 12 / 13 = Pokitaru's pool overlays 1903 / 1919; 14–18 = Kalebo's reflections 1943, 1947, 1948, 1952, 1953.
-const EXPECTED: [(u32, &[usize]); 11] = [(1, &[11]), (2, &[8]), (3, &[0]), (5, &[1]), (7, &[2, 3]), (8, &[4, 19, 20]), (9, &[2]), (11, &[6, 12, 13]), (12, &[7, 9]), (14, &[5, 10]), (16, &[6, 14, 15, 16, 17, 18])];
+/// 12 / 13 = Pokitaru's pool overlays 1903 / 1919; 14–18 = Kalebo's reflections 1943, 1947, 1948, 1952, 1953; 21–26 =
+/// Veldin Orbit's glass 1907.. (1952's code, their own draws).
+const EXPECTED: [(u32, &[usize]); 12] = [(1, &[11]), (2, &[8]), (3, &[0]), (5, &[1]), (7, &[2, 3]), (8, &[4, 19, 20]), (9, &[2]), (11, &[6, 12, 13]), (12, &[7, 9]), (14, &[5, 10]), (16, &[6, 14, 15, 16, 17, 18]), (17, &[21, 22, 23, 24, 25, 26])];
 
 #[test]
 fn sea_inventory_all_levels() {
@@ -66,7 +67,14 @@ fn sea_inventory_all_levels() {
                     eprintln!("level {level:02} {}: FIX2 {:#x} speeds {:?} {:?}", PORTS[p.port].name, h.fix2, h.g1_speed, h.layer_speed);
                 }
                 // The G-REN-026 ports (2026-10-01): checked by their own request (docs/test-requests/2026-10-01-water-liquids.md).
-                SeaData::GridSet(_) | SeaData::Meshes(_) => {}
+                SeaData::Meshes(m) => {
+                    if let sea::SeaKind::Reflect(r) = PORTS[p.port].kind {
+                        assert_eq!(m.meshes.len(), r.meshes, "level {level:02} {}: meshes", PORTS[p.port].name);
+                        assert!(m.meshes.iter().flat_map(|m| &m.strips).all(|s| !s.pos.is_empty()), "level {level:02} {}: empty strip", PORTS[p.port].name);
+                        eprintln!("level {level:02} {}: {} meshes, {} vertices", PORTS[p.port].name, m.meshes.len(), m.meshes.iter().flat_map(|m| &m.strips).map(|s| s.pos.len()).sum::<usize>());
+                    }
+                }
+                SeaData::GridSet(_) => {}
                 SeaData::Pool(d) => {
                     let sea::SeaKind::Pool(m) = PORTS[p.port].kind else { panic!("pool data on a non-pool port") };
                     assert_eq!(d.layers.each_ref().map(Vec::len), m.layers.map(|l| l.4));

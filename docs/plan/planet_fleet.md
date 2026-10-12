@@ -27,8 +27,15 @@ census after Quartu left the seven classes below without a port; with them every
 
 ## Notes
 
-- [L] The backdrop's draw turns depth writes off (GS TEST 0x513f1) and pushes the effect quads' far distance to
-  8 192 000; the port's effect quads write no depth, and the renderer's own far plane applies.
+- [L] The backdrop's draw turns depth writes off (GS TEST 0x513f1); the port's effect quads write no depth. Its
+  0x16d3e4 = 8 192 000 is the view context's far plane (`UpdateViewContext` projects every later frame with it):
+  `Services::view_far`, followed by the projection and the tfrag cull (2026-10-12; the nebula squares hang 1000 past
+  the lanes' far end, y −7000, which the draw also writes).
+- The window glass 1907, 1908, 1910, 1911, 1913, 1918 (2026-10-12): Kalebo's 1952 code with their own draws (FX 0x30,
+  FIX 0x20, the reflection map at factor 4), ported as sea rows (`water::sea::fleet_glass_ref`). They were matched to
+  1952 by code identity and loaded nothing (six copies on the level); a port on its own reference level now wins its
+  exact address in `LevelPorts` (which also gave Quartu's wave meshes 1408/1409/1565/1567 their own rows back from
+  the Fleet's 1405, and Quartu's 1428 its own port).
 - [L] A mine touched by Ratchet's capsule skips its sphere query, so the game tests a stale hit moby; the port takes the
   touch as a blast. 0x13f590 is not kept by the port.
 - Headless screenshots in this session came out black on every level: a capture problem here, not a regression.

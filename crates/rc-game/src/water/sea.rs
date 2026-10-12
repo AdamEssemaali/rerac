@@ -14,6 +14,7 @@
 //! | 10 | 1418 (14) | level14 `0x307a80` | 19 two-texture strips `0x307a28` → `0x2ab3e8` (the same module) |
 //! | 11 | 1848 (01) | level01 `0x30f208` | the reflective overlay `0x30f0e0` ([`env_overlay_ref`]) |
 //! | 14–18 | 1943, 1947, 1948, 1952, 1953 (16) | level16 `0x2e8e80`, `0x2e93b0`, `0x2e98e0`, `0x2e9df0`, `0x2ea128` | Kalebo's reflections ([`reflect_ref`]) |
+//! | 21–26 | 1907, 1908, 1910, 1911, 1913, 1918 (17) | level17 `0x2f57a0`, `0x2f5ab8`, `0x2f5dd0`, `0x2f60e8`, `0x2f6400`, `0x2f6718` | Veldin Orbit's window glass (1952's code, their own draws: [`fleet_glass_ref`]) |
 //! | 12, 13 | 1903, 1919 (11) | level11 `0x31e2f0`, `0x31f150` | Pokitaru's pool overlays `0x31db50`, `0x31e930` (two copies of one module: [`pool_ref`]) |
 //! | 19, 20 | 600, 1649 (08) | level08 `0x2f1548`, `0x3097b0` | Batalia's copies of the pool module `0x2f0dc8`, `0x309030` ([`pool_ref::C`], [`pool_ref::D`]) |
 //!
@@ -152,7 +153,7 @@ const fn grid(state: u32, scale: f32, fix: u8, list: DrawList, variant: GridVari
 pub const OCEAN: usize = 6;
 pub const HOVEN: usize = 7;
 
-pub const PORTS: [SeaPort; 21] = [
+pub const PORTS: [SeaPort; 27] = [
     // level03 0x2dc9b0: 0x291198(2/3, 0x1dc1a0, 0x20); callback 0x2dc990 via 0x1f2d48 (list 1).
     SeaPort { name: "994 liquid", level: 3, func: 0x2d_c9b0, classes: &[994], kind: grid(0x1d_c1a0, TWO_THIRDS, 0x20, DrawList::AfterMobys, GridVariant::Plain) },
     // level05 0x316110: 0x2ce110(1.0, 0x211b20) (FIX 0x80); callback 0x316070 via 0x228110 (after the ties).
@@ -187,6 +188,12 @@ pub const PORTS: [SeaPort; 21] = [
     SeaPort { name: "1953 reflection", level: reflect_ref::LEVEL, func: reflect_ref::R1953.update, classes: &[1953], kind: SeaKind::Reflect(&reflect_ref::R1953) },
     SeaPort { name: "600 Batalia pool overlay", level: pool_ref::C_LEVEL, func: pool_ref::C.update, classes: &[600], kind: SeaKind::Pool(&pool_ref::C) },
     SeaPort { name: "1649 Batalia pool overlay", level: pool_ref::C_LEVEL, func: pool_ref::D.update, classes: &[1649], kind: SeaKind::Pool(&pool_ref::D) },
+    SeaPort { name: "1907 fleet glass", level: fleet_glass_ref::LEVEL, func: fleet_glass_ref::G1907.update, classes: &[1907], kind: SeaKind::Reflect(&fleet_glass_ref::G1907) },
+    SeaPort { name: "1908 fleet glass", level: fleet_glass_ref::LEVEL, func: fleet_glass_ref::G1908.update, classes: &[1908], kind: SeaKind::Reflect(&fleet_glass_ref::G1908) },
+    SeaPort { name: "1910 fleet glass", level: fleet_glass_ref::LEVEL, func: fleet_glass_ref::G1910.update, classes: &[1910], kind: SeaKind::Reflect(&fleet_glass_ref::G1910) },
+    SeaPort { name: "1911 fleet glass", level: fleet_glass_ref::LEVEL, func: fleet_glass_ref::G1911.update, classes: &[1911], kind: SeaKind::Reflect(&fleet_glass_ref::G1911) },
+    SeaPort { name: "1913 fleet glass", level: fleet_glass_ref::LEVEL, func: fleet_glass_ref::G1913.update, classes: &[1913], kind: SeaKind::Reflect(&fleet_glass_ref::G1913) },
+    SeaPort { name: "1918 fleet glass", level: fleet_glass_ref::LEVEL, func: fleet_glass_ref::G1918.update, classes: &[1918], kind: SeaKind::Reflect(&fleet_glass_ref::G1918) },
 ];
 
 pub const ARIDIA: usize = 8;
@@ -223,8 +230,10 @@ pub mod reflect_ref {
     pub const FX: u16 = 0x29;
     pub const FIX: u8 = 0x40;
     pub const FAR: f32 = 512.0;
+    const ST_SCALE: f32 = 2.0;
     /// One class: its update and draw, the count / position / normal / colour pointer tables, the mesh count, the
-    /// sphere check, the distances at init.
+    /// sphere check, the distances at init, the draw's FX and ALPHA FIX, the reflection map's factor (`0x2e9b38`: 2; Veldin
+    /// Orbit's `0x2f54d8`: 4).
     #[derive(Debug, PartialEq)]
     pub struct Port {
         pub update: u32,
@@ -236,12 +245,44 @@ pub mod reflect_ref {
         pub meshes: usize,
         pub culled: bool,
         pub far_dists: bool,
+        pub fx: u16,
+        pub fix: u8,
+        pub st_scale: f32,
     }
-    pub const R1943: Port = Port { update: 0x2e_8e80, draw: 0x2e_8d40, counts: 0x16_1ef0, positions: 0x16_1f00, normals: 0x16_1f20, colours: 0x16_1f30, meshes: 3, culled: true, far_dists: false };
-    pub const R1947: Port = Port { update: 0x2e_93b0, draw: 0x2e_9270, counts: 0x16_1f40, positions: 0x16_1f60, normals: 0x16_1f70, colours: 0x16_1f78, meshes: 1, culled: true, far_dists: true };
-    pub const R1948: Port = Port { update: 0x2e_98e0, draw: 0x2e_97a0, counts: 0x16_1f90, positions: 0x16_1f98, normals: 0x16_1fa8, colours: 0x16_1fb0, meshes: 2, culled: true, far_dists: true };
-    pub const R1952: Port = Port { update: 0x2e_9df0, draw: 0x2e_9ce0, counts: 0x16_1fb8, positions: 0x16_1fc8, normals: 0x16_1fe8, colours: 0x16_1ff8, meshes: 3, culled: false, far_dists: false };
-    pub const R1953: Port = Port { update: 0x2e_a128, draw: 0x2e_9fe8, counts: 0x16_2008, positions: 0x16_2018, normals: 0x16_2038, colours: 0x16_2048, meshes: 3, culled: true, far_dists: true };
+    pub const R1943: Port = Port { update: 0x2e_8e80, draw: 0x2e_8d40, counts: 0x16_1ef0, positions: 0x16_1f00, normals: 0x16_1f20, colours: 0x16_1f30, meshes: 3, culled: true, far_dists: false, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const R1947: Port = Port { update: 0x2e_93b0, draw: 0x2e_9270, counts: 0x16_1f40, positions: 0x16_1f60, normals: 0x16_1f70, colours: 0x16_1f78, meshes: 1, culled: true, far_dists: true, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const R1948: Port = Port { update: 0x2e_98e0, draw: 0x2e_97a0, counts: 0x16_1f90, positions: 0x16_1f98, normals: 0x16_1fa8, colours: 0x16_1fb0, meshes: 2, culled: true, far_dists: true, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const R1952: Port = Port { update: 0x2e_9df0, draw: 0x2e_9ce0, counts: 0x16_1fb8, positions: 0x16_1fc8, normals: 0x16_1fe8, colours: 0x16_1ff8, meshes: 3, culled: false, far_dists: false, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const R1953: Port = Port { update: 0x2e_a128, draw: 0x2e_9fe8, counts: 0x16_2008, positions: 0x16_2018, normals: 0x16_2038, colours: 0x16_2048, meshes: 3, culled: true, far_dists: true, fx: FX, fix: FIX, st_scale: ST_SCALE };
+}
+
+/// Veldin Orbit's window glass (level17; the name is descriptive [L]): six classes whose updates are the code of Kalebo's
+/// 1952 ([`reflect_ref::R1952`]: state 0 → 1, then `RegisterDrawCallback(draw, m)` each tick; no sphere check, no
+/// distances), each registering its own draw: FX 0x30 (the teal cloud map), `ALPHA_1 = 0x2000000064` (FIX 0x20), CLAMP
+/// repeat, TEX1 bilinear, `DrawSpriteHelper_A`, then per mesh the reflection ST (`0x2f54d8` and its copies: 1952's
+/// `0x2e9b38` with the factor 4 for 2) and `DrawEnvOverlayMesh` (level17 `0x1faf00`, clip on). The tables are `$gp`-relative (gp 0x166c00:
+/// `0x2f3848` writes the death height both as 0x15f638 and as gp−0x75c8).
+///
+/// | class | update / draw | counts, positions, normals, colours (gp−) | meshes |
+/// |---|---|---|---|
+/// | 1907 | `0x2f57a0` / `0x2f5690` | 0x4810, 0x4808, 0x47f8, 0x47f0 | 2 |
+/// | 1908 | `0x2f5ab8` / `0x2f59a8` | 0x47e0, 0x47c0, 0x47b0, 0x47a8 | 1 |
+/// | 1910 | `0x2f5dd0` / `0x2f5cc0` | 0x47a0, 0x4798, 0x4788, 0x4780 | 2 |
+/// | 1911 | `0x2f60e8` / `0x2f5fd8` | 0x4770, 0x4750, 0x4740, 0x4738 | 1 |
+/// | 1913 | `0x2f6400` / `0x2f62f0` | 0x4730, 0x4728, 0x4718, 0x4710 | 2 |
+/// | 1918 | `0x2f6718` / `0x2f6608` | 0x4700, 0x46e0, 0x46d0, 0x46c8 | 1 |
+pub mod fleet_glass_ref {
+    use super::reflect_ref::Port;
+    pub const LEVEL: u32 = 17;
+    const FX: u16 = 0x30;
+    const FIX: u8 = 0x20;
+    const ST_SCALE: f32 = 4.0;
+    pub const G1907: Port = Port { update: 0x2f_57a0, draw: 0x2f_5690, counts: 0x16_23f0, positions: 0x16_23f8, normals: 0x16_2408, colours: 0x16_2410, meshes: 2, culled: false, far_dists: false, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const G1908: Port = Port { update: 0x2f_5ab8, draw: 0x2f_59a8, counts: 0x16_2420, positions: 0x16_2440, normals: 0x16_2450, colours: 0x16_2458, meshes: 1, culled: false, far_dists: false, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const G1910: Port = Port { update: 0x2f_5dd0, draw: 0x2f_5cc0, counts: 0x16_2460, positions: 0x16_2468, normals: 0x16_2478, colours: 0x16_2480, meshes: 2, culled: false, far_dists: false, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const G1911: Port = Port { update: 0x2f_60e8, draw: 0x2f_5fd8, counts: 0x16_2490, positions: 0x16_24b0, normals: 0x16_24c0, colours: 0x16_24c8, meshes: 1, culled: false, far_dists: false, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const G1913: Port = Port { update: 0x2f_6400, draw: 0x2f_62f0, counts: 0x16_24d0, positions: 0x16_24d8, normals: 0x16_24e8, colours: 0x16_24f0, meshes: 2, culled: false, far_dists: false, fx: FX, fix: FIX, st_scale: ST_SCALE };
+    pub const G1918: Port = Port { update: 0x2f_6718, draw: 0x2f_6608, counts: 0x16_2500, positions: 0x16_2520, normals: 0x16_2530, colours: 0x16_2538, meshes: 1, culled: false, far_dists: false, fx: FX, fix: FIX, st_scale: ST_SCALE };
 }
 
 /// Pokitaru's pool overlays (level11; the names are descriptive [L]): two copies of one module, 1903 (`0x31e2f0`, draw
@@ -497,8 +538,9 @@ pub enum MeshSt {
     Flow { k: f32, add: f32 },
     /// The two-texture module's sphere map `0x2667fc` from the position, the stored normal and the camera.
     SphereMap,
-    /// Class 1848's reflection map `0x30ef18` plus the port's scroll ([`env_map_st`]).
-    EnvMap,
+    /// Class 1848's reflection map `0x30ef18` plus the port's scroll ([`env_map_st`]); `scale` the map's factor (2; Veldin
+    /// Orbit's glass 4).
+    EnvMap { scale: f32 },
 }
 
 /// The vertex colours of a mesh set.
@@ -536,7 +578,7 @@ pub struct MeshSet {
 
 /// Class 1848's per-vertex ST (`0x30ef18`): `e = unit(p − cam)` (0x167240), `n' = unit(−n)`, `r = unit(e − 2(n'·e)n')`,
 /// `r.z += 1`, `l = |r|`; ST = `2·(r.x/(2l) + 0.5) + scroll.s`, `2·(r.y/(2l) + 0.5) + scroll.t`.
-pub fn env_map_st(p: [f32; 3], n: [f32; 3], cam: [f32; 3], scroll: [f32; 2]) -> [f32; 2] {
+pub fn env_map_st(p: [f32; 3], n: [f32; 3], cam: [f32; 3], scroll: [f32; 2], scale: f32) -> [f32; 2] {
     let unit = |v: [f32; 3]| {
         let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
         v.map(|x| x / l)
@@ -548,7 +590,7 @@ pub fn env_map_st(p: [f32; 3], n: [f32; 3], cam: [f32; 3], scroll: [f32; 2]) -> 
     r[2] += 1.0;
     let l = (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt();
     let (u, v) = (r[0] / (l + l) + 0.5, r[1] / (l + l) + 0.5);
-    [u + u + scroll[0], v + v + scroll[1]]
+    [u * scale + scroll[0], v * scale + scroll[1]]
 }
 
 /// The lava flows' vertex colour `i` (`0x21e8c0`'s 256 words at the scratchpad).
@@ -801,7 +843,7 @@ fn env_overlay_set(ov: &Overlay, rel: &Relocation) -> Result<MeshSet, rc_formats
     Ok(MeshSet {
         meshes: fs::parse_pointer_meshes(ov, label(rel, e::COUNTS)?, label(rel, e::POSITIONS)?, label(rel, e::NORMALS)?, label(rel, e::COLOURS)?, e::MESHES)?,
         colour: MeshColour::Stored,
-        passes: vec![MeshPass { tex: MeshTex::Fx(e::FX), st: MeshSt::EnvMap, fix: e::FIX }],
+        passes: vec![MeshPass { tex: MeshTex::Fx(e::FX), st: MeshSt::EnvMap { scale: 2.0 }, fix: e::FIX }],
         before_grid: false,
         far: 256.0,
     })
@@ -817,7 +859,7 @@ fn reflect_set(ov: &Overlay, rel: &Relocation, r: &reflect_ref::Port) -> Result<
     Ok(MeshSet {
         meshes,
         colour: MeshColour::Stored,
-        passes: vec![MeshPass { tex: MeshTex::Fx(reflect_ref::FX), st: MeshSt::EnvMap, fix: reflect_ref::FIX }],
+        passes: vec![MeshPass { tex: MeshTex::Fx(r.fx), st: MeshSt::EnvMap { scale: r.st_scale }, fix: r.fix }],
         before_grid: false,
         far: reflect_ref::FAR,
     })
@@ -909,7 +951,7 @@ pub fn update(w: &mut World, id: MobyId, port: u8) {
     }
 }
 
-/// Kalebo's reflections ([`reflect_ref`]).
+/// Kalebo's reflections ([`reflect_ref`]) and Veldin Orbit's glass ([`fleet_glass_ref`]).
 fn reflect_update(w: &mut World, id: MobyId, port: usize, r: &reflect_ref::Port) {
     match w.m(id).state {
         0 => {

@@ -320,7 +320,7 @@ pub fn mesh_prims(set: &gs::MeshSet, pass: &gs::MeshPass, counter: u64, cam: [f3
                     gs::MeshSt::Stored { scale } => [st[0] * scale, st[1] * scale],
                     gs::MeshSt::Flow { k, add } => [st[0], st[1] + (k * f + add)],
                     gs::MeshSt::SphereMap => gs::sphere_map_st(*p, normals.get(i).copied().unwrap_or_default(), cam),
-                    gs::MeshSt::EnvMap => gs::env_map_st(*p, normals.get(i).copied().unwrap_or_default(), cam, scroll),
+                    gs::MeshSt::EnvMap { scale } => gs::env_map_st(*p, normals.get(i).copied().unwrap_or_default(), cam, scroll, scale),
                 };
                 let c = match set.colour {
                     gs::MeshColour::Const(c) => c,

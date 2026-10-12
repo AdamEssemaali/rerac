@@ -535,7 +535,12 @@ impl LevelPorts {
         for (l, ov) in &refs {
             let rel = Relocation::new(ov, target);
             for u in ClassUpdate::every().filter(|u| u.reference_level() == *l) {
-                for c in rel.copies(u.address()) { copies.entry(c).or_insert(u); }
+                for c in rel.copies(u.address()) {
+                    // On its own reference level a port's address is that class's update exactly: it wins over another
+                    // port's copy of the same code (Veldin Orbit's glass 1907.. are copies of Kalebo's 1952 with their
+                    // own draws).
+                    if rel.is_identity() { copies.insert(c, u); } else { copies.entry(c).or_insert(u); }
+                }
             }
             if *l == 1 {
                 for &a in external { for c in rel.copies(a) { ext_copies.entry(c).or_insert(a); } }
