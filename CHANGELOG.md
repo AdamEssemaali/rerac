@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.3-alpha
+
+Fixes from playing v0.3.2.
+
+- Gemlik Base: Qwark's shield drops again, he flies off when the fight starts, the camera follows his crash, and his health bar goes away afterwards.
+- Gemlik Base: after the fight the new ship is waiting, closed, with its orange canopy, and Ratchet can board it.
+- Veldin Orbit: the nebulae out past the fleet are back, the windows have their glass, and the two pools near the start have water.
+- Quartu: the patrolling guard walks its route again, so the Hologuise gets Ratchet past the barrier.
+- Hoven: Ratchet freezes in the icy water.
+- Veldin: after dying, the pools drained with the Hydrodisplacer stay drained.
+- Blarg Station: broken objects no longer leave oversized pieces behind.
+- First person: only a thrown wrench shows in Ratchet's hand.
+- The Drone Device works from the pause menu, and its drones show up next to Ratchet there.
+- The map page on Veldin shows the right name.
+- Cutscene dialogue plays in the chosen language.
+
 ## v0.3.2-alpha
 
 Fixes from playing v0.3.1.
