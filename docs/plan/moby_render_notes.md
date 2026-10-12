@@ -25,7 +25,7 @@ record's `size`, and turns each into a 0x100-byte runtime moby (`InitMobyInstanc
 | 0x30 | f32 position[3] | +0x10 |
 | 0x3c | f32 rotation[3] | +0x40 (Euler, radians) |
 | 0x48 | group | +0x21 (byte) |
-| 0x4c / 0x50 | is_rooted, rooted distance | z = ground (`FUN_0026e618`) + distance when set (0 instances on Novalis) |
+| 0x4c / 0x50 | is_rooted, rooted distance | z = ground (`FUN_0026e618`) + distance when set (0 instances on Novalis; 311 on 13 levels; ported 2026-10-12: `rc_game::moby_update::scheduler::root_instances` at the level load) |
 | 0x58 | pvar index | +0x78 |
 | 0x5c | occlusion | 0 → +0x36 = 0, else 0x7f80 |
 | 0x60 | mode bits | OR'd into +0x34 and into class header +0x44 |
