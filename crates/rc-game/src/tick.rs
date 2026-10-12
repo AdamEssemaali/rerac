@@ -360,7 +360,7 @@ impl Game {
         // The mobys the hero update created (CreateMoby inside it: the water splash 775), before anything else can take a
         // slot, with their MobyBuildMatrix (hero::fx::create_mobys).
         if !self.hero.fx.mobys.is_empty() {
-            for id in crate::hero::fx::create_mobys(&mut self.hero, &mut self.mobys, self.hero_moby, hits, self.counter) {
+            for id in crate::hero::fx::create_mobys(&mut self.hero, &mut self.mobys, self.hero_moby, hits, hero_sounds, &mut self.rng, self.counter) {
                 if let Some(w) = hooks.world.as_deref_mut() { w.build_matrix(&mut self.mobys, id); }
             }
         }

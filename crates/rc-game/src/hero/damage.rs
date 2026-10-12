@@ -53,9 +53,14 @@
 //! while it rises (`0x209ec8`: the side spark and the fire ring on their timers 0x13f7ee / 0x13f7ec):
 //! [`super::fx::burn_fire`], [`super::fx::burn_bounce_fire`].
 //!
+//! **The ice of 0x7f** (L01 `0x2370b8` case 0x7f): while 0x13f9f4 is 0, `CreateMoby(0x52a)` at the hero (0x13f3d0,
+//! rotation 0x13f3e0), update distance 0, drawn, draw distance 0x40, alpha 0, mode | 0x800, `MobyBuildMatrix`,
+//! `PlayClassSound(0, 0)`; then every tick its alpha += `trunc(5·[0x15ed60])` (at most 0x80) and it takes the hero
+//! moby's position and rotation (`MobyBuildMatrix`): [`ICE_CLASS`], `super::fx::create_mobys` (after the hero update,
+//! so its sound's draw comes after the state's [L]).
+//!
 //! **Not ported** (cosmetic, and they draw from `rand`, so the stream diverges from the PS2 in these states only):
-//! 0x7f's
-//! bubble moby (class 0x52a, `CreateMoby` + its class sound); 0x7c's level-6 fog colour (0x141644 / 0x141648);
+//! 0x7c's level-6 fog colour (0x141644 / 0x141648);
 //! the help-flag clear `0x225938` and the level-15 flag 0x15f5a4 of the death sequence; the game mode 0x15f5c4
 //! test of the intake (0 in gameplay ticks); the Giant Clank branch of the intake (body 2, not ported).
 //!
@@ -138,10 +143,16 @@ pub struct Damage {
     /// 0x13f7ee / 0x13f7ec: the burn bounce's spark and fire-ring timers ([`super::fx::burn_bounce_fire`]).
     pub burn_spark: i16,
     pub burn_ring: i16,
+    /// 0x13f9f4: the ice of the sinking death 0x7f (class [`ICE_CLASS`], created by its first physics tick; the hero
+    /// init clears it).
+    pub ice: Option<MobyId>,
     /// Voices queued by the entries, played by [`flush`]; 0x77's spin draws follow them.
     pending: Vec<(i32, u32)>,
     pending_spin: bool,
 }
+
+/// The sinking death's ice (`CreateMoby(0x52a)`).
+pub const ICE_CLASS: i16 = 0x52a;
 
 // ------------------------------------------------------------------------------------------------
 // Shared pieces.
@@ -481,6 +492,7 @@ pub(super) fn physics(h: &mut Hero, env: &Env, anim: &mut dyn AnimCtl, rng: &mut
             h.gravity_from(z, Pf::b(0x3b83_126f));
         }
         0x75 | 0x76 | 0x7f => {
+            if h.state == 0x7f { h.fx.mobys.push(super::fx::MobySpawn::Ice); }
             // 0x75 (hurt on the surface): the wake `0x22ac40(15, 30)` (0x2387bc, top of the case).
             if h.state == 0x75 { super::swim::effects::wake(h, rng, 15, 30); }
             // 0x76 (hurt under water): a burst of bubbles `0x22b140(min(10 − timer/3, 8), 0)`, fewer each 3 ticks.

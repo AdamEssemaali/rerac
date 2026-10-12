@@ -104,6 +104,8 @@ pub enum MobySpawn {
     /// `HeroTickStateTimer`'s `CreateMoby(0x27a)`: the Hologuise disguise at the hero (`pos` = 0x13f3d0, `rot` =
     /// 0x13f3e0), then `SwitchCharacter(3, 0x53, moby)` (`super::hologuise`).
     Disguise { pos: [f32; 4], rot: [f32; 4] },
+    /// The sinking death 0x7f's ice (`super::damage`'s module doc): created once, then faded in on the hero moby.
+    Ice,
 }
 
 /// Ratchet's moby as the last write-back left it (`MobyBuildMatrix` of the previous tick): what `FUN_002645a8(Ratchet,
@@ -568,7 +570,16 @@ pub fn reserve(rng: &mut Rng, n: usize) -> Rng {
 /// The tick's part, right after the hero update: create the mobys the hero code asked for this tick, in order
 /// (`CreateMoby` through the hit sink: `super::items::HitSink::create_moby`), and fill them as their creators do.
 /// Returns the new mobys (the tick builds their matrices). `light` = Ratchet's light word.
-pub fn create_mobys(h: &mut Hero, table: &mut crate::moby_runtime::MobyTable, hero_moby: usize, hits: &mut dyn super::items::HitSink, counter: u64) -> Vec<usize> {
+#[allow(clippy::too_many_arguments)]
+pub fn create_mobys(
+    h: &mut Hero,
+    table: &mut crate::moby_runtime::MobyTable,
+    hero_moby: usize,
+    hits: &mut dyn super::items::HitSink,
+    sounds: &mut dyn HeroSounds,
+    rng: &mut Rng,
+    counter: u64,
+) -> Vec<usize> {
     let mut out = Vec::new();
     let light = table.mobys.get(hero_moby).map(|m| m.light);
     for s in std::mem::take(&mut h.fx.mobys) {
@@ -598,6 +609,32 @@ pub fn create_mobys(h: &mut Hero, table: &mut crate::moby_runtime::MobyTable, he
                 h.bodies.disguise = Some(id);
                 // `SwitchCharacter(3, 0x53, moby)`: made by the next tick before the classes' calls (`Bodies::restore`).
                 h.bodies.restore = Some((super::bodies::body::DISGUISE, super::hologuise::IDLE, super::bodies::BodyMoby { id, o_class: class, anim: m.anim }));
+                out.push(id);
+            }
+            MobySpawn::Ice => {
+                let class = super::damage::ICE_CLASS;
+                let id = match h.damage.ice {
+                    Some(id) => id,
+                    None => {
+                        let Some(id) = hits.create_moby(table, class, counter) else { continue };
+                        let m = &mut table.mobys[id];
+                        m.position = h.pos.map(|v| v.to_f32());
+                        m.rotation = h.rot.map(|v| v.to_f32());
+                        m.update_dist = 0;
+                        m.visible = 1;
+                        m.draw_dist = 0x40;
+                        m.alpha = 0;
+                        m.mode |= 0x800;
+                        let p = m.position;
+                        h.damage.ice = Some(id);
+                        sounds.item_sound(class, [p[0], p[1], p[2]], 0, 0, rng);
+                        id
+                    }
+                };
+                let Some((pos, rot)) = table.mobys.get(h.hero_moby(hero_moby)).map(|m| (m.position, m.rotation)) else { continue };
+                let Some(m) = table.mobys.get_mut(id) else { continue };
+                m.alpha = m.alpha.saturating_add(5).min(0x80);
+                (m.position, m.rotation) = (pos, rot);
                 out.push(id);
             }
         }
