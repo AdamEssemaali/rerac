@@ -270,7 +270,7 @@
 //! | U494 | 250 Oltanis's hatches, 309 its leaning floats (14) | level14 0x2d96e0, 0x2de1f8 | [`oltanis_small`] |
 //! | U488 | 8 Oltanis's searchlight sentries (14): sweep a beam along a path, raise the pop-up turrets on finding Ratchet | level14 0x2ac618, 0x2aee28, 0x2ae260 | [`oltanis_sentry`] |
 //! | U551, U560, U536, U556, U530 | 1394 Quartu's bomb droppers and their bombs 1257, 1560 its scene thrusters, 92 its gates, 1430 its dispenser and its piece 1428, 67 its sliding doors (15) | level15 0x2eabd8, 0x2e7f68, 0x2edb20, 0x2a36d0, 0x2ec030, 0x2ebd78, 0x29aff0 | [`quartu_small`] |
-//! | U552 | 1408, 1409, 1565, 1567 Quartu's and 1405, 1406, 1407 the Fleet's rippling water meshes (15, 17) | level15 0x2eb0a0.., level17 0x2f08e0.. | [`wave_mesh`] |
+//! | U552 | 1408, 1409, 1565, 1567 Quartu's and 1405, 1406, 1407, 1426 (U607) the Fleet's rippling water meshes (15, 17) | level15 0x2eb0a0.., level17 0x2f08e0.. | [`wave_mesh`] |
 //! | U535 | 78 the energy barriers (15, 17): a shimmering wall with drifting motes, shut down by a link or the mission | level15 0x2a2bf0, 0x2a3138 | [`barrier_field`] |
 //! | U546 | 655 the electrified water (15, 17): shocks Ratchet in it, sparks along its lines, switched off for a countdown | level15 0x2d6810, 0x2d8710, 0x2d77c0 | [`water_shock`] |
 //! | U528 | 44 Quartu's guards (15): watch, patrol, raise the alarm, shoot; fooled by the Hologuise; their shot 934 | level15 0x2979d8, 0x2e4380 | [`quartu_guard`] |
@@ -1182,6 +1182,8 @@ pub const PORTS: &[UnitPort] = &[
     UnitPort { unit: "U552 1406 draw", level: wave_mesh::DEFS[5].level, func: wave_mesh::DEFS[5].draw, classes: &[], update: empty::update, joints: &[] },
     UnitPort { unit: "U552 1407", level: wave_mesh::DEFS[6].level, func: wave_mesh::DEFS[6].update, classes: &wave_mesh::CLASSES[6], update: wave_mesh::UPDATES[6], joints: &[] },
     UnitPort { unit: "U552 1407 draw", level: wave_mesh::DEFS[6].level, func: wave_mesh::DEFS[6].draw, classes: &[], update: empty::update, joints: &[] },
+    UnitPort { unit: "U607 1426", level: wave_mesh::DEFS[7].level, func: wave_mesh::DEFS[7].update, classes: &wave_mesh::CLASSES[7], update: wave_mesh::UPDATES[7], joints: &[] },
+    UnitPort { unit: "U607 1426 draw", level: wave_mesh::DEFS[7].level, func: wave_mesh::DEFS[7].draw, classes: &[], update: empty::update, joints: &[] },
     UnitPort { unit: "U507 921", level: oltanis_carrier::REFERENCE_LEVEL, func: oltanis_carrier::CARRIER_FN, classes: &oltanis_carrier::CARRIER_CLASSES, update: oltanis_carrier::carrier_update, joints: &[] },
     UnitPort { unit: "U508 922", level: oltanis_carrier::REFERENCE_LEVEL, func: oltanis_carrier::MISSILE_FN, classes: &oltanis_carrier::MISSILE_CLASSES, update: oltanis_carrier::missile_update, joints: &[] },
     UnitPort { unit: "U496 386", level: oltanis_arc::REFERENCE_LEVEL, func: oltanis_arc::UPDATE_FN, classes: &oltanis_arc::CLASSES, update: oltanis_arc::update, joints: &[] },

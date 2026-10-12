@@ -1,7 +1,8 @@
 //! **The rippling water meshes of Quartu and the Fleet** (census U552): Quartu's 1408 / 1409 / 1565 / 1567 (level15
 //! `0x2eb0a0` / `0x2eb458` / `0x2edf58` / `0x2ee338`, draws `0x2eac90` / `0x2eb108` / `0x2edbe0` / `0x2edfc0`) and the
-//! Fleet's 1405 / 1406 / 1407 (level17 `0x2f08e0` / `0x2f0ca0` / `0x2f1060`, draws `0x2f04d0` / `0x2f0948` /
-//! `0x2f0d08`); one placed each. One code with its own tables per class. Read from the level15 / level17 decomp and
+//! Fleet's 1405 / 1406 / 1407 / 1426 (level17 `0x2f08e0` / `0x2f0ca0` / `0x2f1060` / `0x2f1418`, draws `0x2f04d0` /
+//! `0x2f0948` / `0x2f0d08` / `0x2f10c8`); one placed each, 1426 twice (the two pools by the start). One code with its
+//! own tables per class (1426's constants gp−0x488c.. equal 1407's gp−0x48ec..). Read from the level15 / level17 decomp and
 //! data; native `f32`.
 //!
 //! * **The update**: at first the ambient (0x40, 0x40, 0x40) (`0x23f958`) → 1; then hidden (mode \| 1), draw
@@ -21,6 +22,7 @@
 //! | 1405 | 148, 11 | 1 | 1.14 | 0.1 |
 //! | 1406 | 89 | 1 | 1.14 | 0.025 |
 //! | 1407 | 45 | 1 | 1.14 | 0.025 |
+//! | 1426 | 45 | 1 | 1.14 | 0.025 |
 
 use std::sync::Arc;
 
@@ -44,7 +46,7 @@ pub struct Def {
     pub speed: f32,
 }
 
-pub const DEFS: [Def; 7] = [
+pub const DEFS: [Def; 8] = [
     Def { level: 15, class: 1408, update: 0x2e_b0a0, draw: 0x2e_ac90, strips: &[(148, 0x1d_9e40, 0x1d_ad98), (148, 0x1d_a530, 0x1d_b238), (31, 0x1d_ac20, 0x1d_b6d8)], scale: 1.0, period: 1.14, speed: 0.1 },
     Def { level: 15, class: 1409, update: 0x2e_b458, draw: 0x2e_b108, strips: &[(68, 0x1d_dba0, 0x1d_ded0)], scale: 1.0, period: 1.14, speed: 0.025 },
     Def { level: 15, class: 1565, update: 0x2e_df58, draw: 0x2e_dbe0, strips: &[(46, 0x1d_e860, 0x1d_ea88)], scale: 0.5, period: 2.0, speed: 0.1 },
@@ -52,8 +54,9 @@ pub const DEFS: [Def; 7] = [
     Def { level: 17, class: 1405, update: 0x2f_08e0, draw: 0x2f_04d0, strips: &[(148, 0x1d_a040, 0x1d_a7b8), (11, 0x1d_a730, 0x1d_ac58)], scale: 1.0, period: 1.14, speed: 0.1 },
     Def { level: 17, class: 1406, update: 0x2f_0ca0, draw: 0x2f_0948, strips: &[(89, 0x1d_be20, 0x1d_c250)], scale: 1.0, period: 1.14, speed: 0.025 },
     Def { level: 17, class: 1407, update: 0x2f_1060, draw: 0x2f_0d08, strips: &[(45, 0x1d_cee0, 0x1d_d100)], scale: 1.0, period: 1.14, speed: 0.025 },
+    Def { level: 17, class: 1426, update: 0x2f_1418, draw: 0x2f_10c8, strips: &[(45, 0x1d_d760, 0x1d_d980)], scale: 1.0, period: 1.14, speed: 0.025 },
 ];
-pub const CLASSES: [[i16; 1]; 7] = [[1408], [1409], [1565], [1567], [1405], [1406], [1407]];
+pub const CLASSES: [[i16; 1]; 8] = [[1408], [1409], [1565], [1567], [1405], [1406], [1407], [1426]];
 
 const FX: usize = 0x2d;
 const ALPHA: u32 = 0x40;
@@ -127,8 +130,8 @@ pub fn update(w: &mut World, id: MobyId, k: usize) {
 macro_rules! updates {
     ($($name:ident = $k:expr),*) => { $(pub fn $name(w: &mut World, id: MobyId) { update(w, id, $k) })* };
 }
-updates!(update_1408 = 0, update_1409 = 1, update_1565 = 2, update_1567 = 3, update_1405 = 4, update_1406 = 5, update_1407 = 6);
-pub const UPDATES: [fn(&mut World, MobyId); 7] = [update_1408, update_1409, update_1565, update_1567, update_1405, update_1406, update_1407];
+updates!(update_1408 = 0, update_1409 = 1, update_1565 = 2, update_1567 = 3, update_1405 = 4, update_1406 = 5, update_1407 = 6, update_1426 = 7);
+pub const UPDATES: [fn(&mut World, MobyId); 8] = [update_1408, update_1409, update_1565, update_1567, update_1405, update_1406, update_1407, update_1426];
 
 /// The draw `f` of `level` for moby `id` (module doc).
 pub fn fx_quads(table: &MobyTable, svc: &Services, level: u32, f: u32, id: MobyId) -> Option<FxQuads> {
