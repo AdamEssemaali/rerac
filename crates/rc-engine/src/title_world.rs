@@ -78,7 +78,9 @@ pub fn load(root: &std::path::Path) -> anyhow::Result<TitleData> {
     let tfrag_lod = crate::tfrag_lod::load(core, data, gs)?;
     let fog = crate::game_camera::LevelFog::parse(gameplay).context("title level settings")?;
     let background = crate::game_camera::level_background(gameplay).context("title level settings")?;
-    let mobys = crate::moby_render::load_mobys_with_gs(root, core, data, gameplay, gs).context("title mobys")?;
+    // (The collision only for the records' ground snap: the title world has no game tick.)
+    let mesh = rc_formats::collision::parse_collision(core, data).ok();
+    let mobys = crate::moby_render::load_mobys_with_gs(root, core, data, gameplay, gs, mesh.as_ref()).context("title mobys")?;
     let ties = crate::tie_render::load_ties(core, data, gs, gameplay, &textures).context("title ties")?;
     let shrubs = crate::shrub_render::load_shrubs(core, data, gs, gameplay, &textures).context("title shrubs")?;
     let sky = crate::sky_render::load(core, data, rc_game::sky_stars::TITLE_LEVEL).context("title sky")?;

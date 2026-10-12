@@ -143,7 +143,10 @@ pub fn load_level(root: &Path, index: u32) -> Result<LoadedLevel> {
     let gameplay = rc_data::level_gameplay(root, index).context("decompressing gameplay_ntsc")?.to_vec();
     let fog = crate::game_camera::LevelFog::parse(&gameplay).context("parsing level settings")?;
     let background = crate::game_camera::level_background(&gameplay).context("parsing level settings")?;
-    let mobys = crate::moby_render::load_mobys(root, &core, &core_data, &gameplay).context("loading mobys")?;
+    let collision = rc_formats::collision::parse_collision(&core, &core_data)
+        .map_err(|e| eprintln!("level {index:02}: collision not parsed ({e}); no game tick"))
+        .ok();
+    let mobys = crate::moby_render::load_mobys(root, &core, &core_data, &gameplay, collision.as_ref()).context("loading mobys")?;
     let ties = crate::tie_render::load_ties(&core, &core_data, &gs_ram, &gameplay, &textures).context("loading ties")?;
     let shrubs = crate::shrub_render::load_shrubs(&core, &core_data, &gs_ram, &gameplay, &textures).context("loading shrubs")?;
 
@@ -154,9 +157,6 @@ pub fn load_level(root: &Path, index: u32) -> Result<LoadedLevel> {
     let hud = crate::hud_render::load(root, index, &core, &core_index, &core_data, &gameplay).map_err(|e| eprintln!("hud: {e:#}")).ok();
     let water = crate::water_render::load(root, index, &gameplay).context("loading water")?;
     let sea = crate::sea_render::load(&core, &core_index, &core_data, &water);
-    let collision = rc_formats::collision::parse_collision(&core, &core_data)
-        .map_err(|e| eprintln!("level {index:02}: collision not parsed ({e}); no game tick"))
-        .ok();
     let death_z = level_settings_f32(&gameplay, 0x28).context("reading the death height")?;
     let audio = crate::audio_out::load(root, index, &core_index, &core, &core_data, &gameplay, collision.clone());
     let moby_class_order = core.moby_classes.iter().map(|e| e.o_class).collect();

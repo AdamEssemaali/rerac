@@ -54,7 +54,8 @@ pub struct MobyInstance {
     pub rotation: [f32; 3],
     /// 0x48: moby group, or -1 (→ moby+0x21, byte).
     pub group: i32,
-    /// 0x4c: non-zero: z = ground height below the position (`FUN_0026e618`) + `rooted_distance` (not ported).
+    /// 0x4c: non-zero: z = ground height below the position (`FUN_0026e618`) + `rooted_distance` (the loader's snap:
+    /// `rc_game::moby_update::scheduler::root_instances`).
     pub is_rooted: i32,
     /// 0x50: see `is_rooted`.
     pub rooted_distance: f32,

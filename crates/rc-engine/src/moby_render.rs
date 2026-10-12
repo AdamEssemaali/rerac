@@ -164,17 +164,23 @@ fn decode_env_maps(core: &LevelCore, gs_ram: &[u8]) -> [Option<Texture>; 3] {
 }
 
 /// Parses the classes, their sequences and the instances, and builds every instance's light block.
-pub fn load_mobys(root: &Path, core: &LevelCore, core_data: &[u8], gameplay_file: &[u8]) -> Result<LevelMobys> {
+/// `mesh`: the level collision, for the records' ground snap (`rc_game::moby_update::scheduler::root_instances`).
+pub fn load_mobys(root: &Path, core: &LevelCore, core_data: &[u8], gameplay_file: &[u8], mesh: Option<&rc_formats::collision::Collision>) -> Result<LevelMobys> {
     let gs_ram = crate::disc_source::level_file(root, crate::level_load::level_index(), "gs_ram.bin").context("reading gs_ram for the moby env maps")?;
-    load_mobys_with_gs(root, core, core_data, gameplay_file, &gs_ram)
+    load_mobys_with_gs(root, core, core_data, gameplay_file, &gs_ram, mesh)
 }
 
 /// [`load_mobys`] with the GS image given (the level's gs_ram, or the title world's GS upload, crate::title_world).
-pub fn load_mobys_with_gs(root: &Path, core: &LevelCore, core_data: &[u8], gameplay_file: &[u8], gs_ram: &[u8]) -> Result<LevelMobys> {
+pub fn load_mobys_with_gs(root: &Path, core: &LevelCore, core_data: &[u8], gameplay_file: &[u8], gs_ram: &[u8], mesh: Option<&rc_formats::collision::Collision>) -> Result<LevelMobys> {
     let t0 = Instant::now();
     let classes = moby::parse_level_mobys(core, core_data).context("parsing moby classes")?;
     let anim = moby_anim::load_anim_classes(core, core_data, &classes);
-    let instances = gameplay::parse_moby_instances(gameplay_file).context("parsing moby instances")?;
+    let mut instances = gameplay::parse_moby_instances(gameplay_file).context("parsing moby instances")?;
+    // The loader's ground snap of the rooted records (`InitLevelRenderGlobals`), before anything reads a position.
+    if let Some(mesh) = mesh {
+        let n = rc_game::moby_update::scheduler::root_instances(&mut instances, mesh);
+        if n != 0 { println!("mobys: {n} rooted instances put on the ground"); }
+    }
     let env_maps = decode_env_maps(core, gs_ram);
     let parse_time = t0.elapsed();
 

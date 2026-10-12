@@ -476,6 +476,29 @@ impl LevelStatics {
     }
 }
 
+/// The is-rooted ground snap of the loader's instance loop (`InitLevelRenderGlobals` 0x255958, after the position is
+/// copied): a record with +0x4c ≠ 0 (`is_rooted`) gets z = `GroundHeight(0.5, position, 0)` + +0x50 (`rooted_distance`)
+/// when that height is above 0 (a miss gives 0: the record's z stays). `GroundHeight` 0x26e618 is `CollLine_Fix` from
+/// 0.5 above the position down to z = 0.01, flags 2, against the world mesh. [L] The game's line also meets the
+/// mobys the loop made before this record (`MobyBuildMatrix` registers each one's collision as it is created): on the
+/// disc that matters for one record, Hoven's 346 (index 322), which lands on the class-19 moby #129 at 25.5 in the game
+/// and on the ground at 24.1 here. Applied to the records themselves, so every load of them (the level's, the death reload's, the
+/// renderer's placements) uses the snapped height. 311 records on 13 levels (Oltanis's Qwark at the PDA stand: 74 →
+/// the floor at 72.6). Returns how many moved.
+pub fn root_instances(instances: &mut [rc_formats::gameplay::MobyInstance], mesh: &rc_formats::collision::Collision) -> usize {
+    let mut moved = 0;
+    for inst in instances.iter_mut().filter(|i| i.is_rooted != 0) {
+        let [x, y, z] = inst.position;
+        let h = crate::collision_query::coll_line(mesh, [x, y, z + 0.5], [x, y, f32::from_bits(0x3c23_d70a)], crate::collision_query::QueryFlags(2))
+            .map_or(0.0, |o| o.point[2]);
+        if 0.0 < h {
+            inst.position[2] = h + inst.rooted_distance;
+            moved += 1;
+        }
+    }
+    moved
+}
+
 /// The loader's instance loop (`InitLevelRenderGlobals` 0x255958, after `InitMobyInstance`): the records whose
 /// spawn test passed (`tests`, `rc_formats::moby_spawn::loader_spawns`) become consecutive mobys; the others
 /// get `0x1acc00[i] = −1` and no slot. Per created moby: +0xb2 spawn id, +0xb1 / +0xb4 / +0xb6 from the test,
@@ -483,7 +506,7 @@ impl LevelStatics {
 /// occlusion word, pvars (`pvars` indexed by pvar index, moby links already remapped:
 /// `rc_formats::gameplay::parse_pvars_spawned`), mode bits (OR'd into the class's +0x44 as well, so later
 /// instances and `CreateMoby` see them: `classes` is updated), `MobyBuildMatrix`, ambient and light word. The
-/// is-rooted ground snap (none on Novalis) is not applied.
+/// is-rooted ground snap is applied to the records before (`root_instances`, the engine's level load).
 pub fn load_level_mobys(
     instances: &[rc_formats::gameplay::MobyInstance],
     classes: &mut crate::moby_update::ClassTable,
@@ -572,5 +595,25 @@ fn part_hits(w: &mut World) {
     for h in hits {
         let Some(owner) = (h.owner as usize).checked_sub(1).filter(|&o| o < w.table.mobys.len()) else { continue };
         crate::moby_update::creature::attack::hit_moby(w, hero, owner, h.damage, 1, h.pos, h.dir);
+    }
+}
+
+#[cfg(test)]
+mod root_tests {
+    /// `InitLevelRenderGlobals`' ground snap on Oltanis: Qwark at the PDA stand (851, `is_rooted` 1, offset 0, placed at
+    /// z 74) stands on the floor under him (72.609); a record without the flag keeps its z.
+    #[test]
+    fn rooted_records_stand_on_the_ground() {
+        let (Some(core), Some(g)) = (rc_formats::test_data::core(14), rc_formats::test_data::gameplay(14)) else { eprintln!("skipped: no extracted/"); return };
+        let mesh = rc_formats::collision::parse_collision(&core.core, &core.data).unwrap();
+        let mut inst = rc_formats::gameplay::parse_moby_instances(&g).unwrap();
+        let before = inst.clone();
+        let moved = super::root_instances(&mut inst, &mesh);
+        let rooted = inst.iter().filter(|i| i.is_rooted != 0).count();
+        eprintln!("Oltanis: {moved} of {rooted} rooted records moved (the others have no ground under them and keep their z)");
+        assert!(0 < moved && moved <= rooted);
+        let q = inst.iter().find(|i| i.o_class == 851).unwrap();
+        assert!((q.position[2] - 72.609).abs() < 0.01, "Qwark on the floor: {}", q.position[2]);
+        for (a, b) in inst.iter().zip(&before).filter(|(a, _)| a.is_rooted == 0) { assert_eq!(a.position, b.position); }
     }
 }
