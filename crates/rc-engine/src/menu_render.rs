@@ -805,6 +805,17 @@ fn menu_frame(
                     rc_game::inventory::apply_close_requests(sess, &req);
                     println!("menus: frame {frame}: equip requests (hand, feet, head, back) {req:?}");
                 }
+                // ✕ on the Drone Device (0x28f260): with its ammo (`0x249530(0x18)`), 0x141345 = 1 (launched by the first
+                // tick after the menu) and 0x141347 = min(0x141347 + ammo, 6) (the 3D Ratchet's drones: crate::menu_models).
+                if out.drone {
+                    let n = play.game.hero.weapons.has_ammo(rc_game::moby_update::classes::drone::DRONE_DEVICE);
+                    if n != 0 {
+                        sess.drone = true;
+                        let d = &mut play.svc.drones;
+                        d.live = (d.live as i32 + n).min(6) as u8;
+                        println!("menus: frame {frame}: drone device: {} drones shown, launch requested", d.live);
+                    }
+                }
                 if let Some(x) = out.exit {
                     // The map system back to the level (its view, zooms and a Map-o-Matic switch kept).
                     play.svc.map = std::mem::take(&mut menu.map.state);

@@ -24,8 +24,7 @@
 //!   hand item on its attach list (sequence 1); the pending head item and boots posed from his joints
 //!   (`rc_game::hero::worn::pose_from_host`); the Persuader (0x197, on his joint list 0x1e), the Map-o-Matic (0x266)
 //!   and the Bolt Grabber (0x26a, list 0x1d) when owned (`fun_002250f0`: on sequence 0, advanced, at the list's
-//!   matrix with its rows normalised). Not drawn: the drones (class 0x1df, `spawn_extra479`'s orbit; the hero's drone
-//!   counts 0x141346 / 0x141347 are not kept by the port: G-UI-002).
+//!   matrix with its rows normalised); the Drone Device's drones ([`Role::Drone`], [`drone_place`]).
 //! * Item preview: the focused cell's item at camera + the table 0x1c4988 offset, rotated, cut to its sequence then
 //!   advanced every menu frame; Clank with it for a back item.
 //! * The end page's Helpdesk girl (`rc_game::menus::pause::media`, G-CUT-008): class 0x7a5 at camera + (2.2, 0, −1.6),
@@ -97,6 +96,29 @@ enum Role {
     Extra,
     /// The 3D Ratchet's animation props (`rc_game::menus::pause::model_anim`: made at his place, on their sequence).
     Prop,
+    /// The 3D Ratchet's drones (`LoadHandGadget`: up to 8 mobys of class 0x1df, slot k made while k < 0x141347, update
+    /// `spawn_extra479` 0x225180: [`drone_place`]).
+    Drone,
+}
+
+/// The 3D Ratchet's drone slots.
+const DRONE_SLOTS: usize = 8;
+
+/// `spawn_extra479` 0x225180 for drone slot `k` at menu frame `frame`, around Ratchet at `pos` (yaw π, his rows' z up):
+/// with u = 2k (k < 3) or 2k + 1, the orbit angle a = ((frame mod 200)/200·2π − π) + ((u mod 6)·2π/6 − π) and the bob
+/// b = ((frame mod 170)/170·2π − π) + (u mod 6)·4π/6 (`fast_add_rotations`), the offset (cos a, sin a, 0.25·sin b +
+/// 0.5 + the fly-in) through his rows, the rows his turned about z by a + π/2. Returns (rows, position).
+fn drone_place(k: usize, frame: u64, fly: f32, pos: [f32; 3]) -> ([V4; 3], [f32; 3]) {
+    use rc_game::moby_update::creature::add_rot;
+    use std::f32::consts::{FRAC_PI_2, PI, TAU};
+    let u = (if k < 3 { 2 * k } else { 2 * k + 1 } % 6) as f32;
+    let a = add_rot((frame % 200) as f32 / 200.0 * TAU - PI, u * TAU / 6.0 - PI);
+    // (The game's `fast_normalize_angle` of the second term is not kept: the term goes in as it is.)
+    let b = add_rot((frame % 170) as f32 / 170.0 * TAU - PI, u * 12.566_36 / 6.0);
+    // His rows (yaw π): x → −x, y → −y.
+    let off = [-a.cos(), -a.sin(), b.sin() * 0.25 + 0.5 + fly];
+    let rows = moby_light::rotation_rows([0.0, 0.0, add_rot(a + FRAC_PI_2, PI)]);
+    (rows, [pos[0] + off[0], pos[1] + off[1], pos[2] + off[2]])
 }
 
 struct Part {
@@ -141,6 +163,11 @@ struct PreviewRt {
     /// The joints of Ratchet's lists 0x16 / 0x17 (his feet): `LoadHandGadget`'s nodes 0x1ba390 / 0x1ba3d0 at scale
     /// 0.01 while a feet item is on (the boots replace them).
     feet: [Option<u8>; 2],
+    /// The drone slots: made (class 0x1df), and the fly-in height 0x1ba410 and its velocity 0x1ba428 (3 for a drone
+    /// not yet out in the level, k ≥ 0x141346; springing to 0).
+    drones: [bool; DRONE_SLOTS],
+    drone_fly: [f32; DRONE_SLOTS],
+    drone_vel: [f32; DRONE_SLOTS],
 }
 
 /// The 3D Ratchet's back item callback `0x224fc0`, its animation part, then `MobyAnimAdvance`: when the last advance
@@ -237,7 +264,7 @@ fn setup(
             607..=609 => &[Role::Back, Role::Item],
             433 | 1289 | 1290 => &[Role::Head, Role::Item],
             173 | 195 => &[Role::BootL, Role::BootR, Role::Item],
-            0x1df => &[Role::Item],
+            0x1df => &[Role::Item, Role::Drone, Role::Drone, Role::Drone, Role::Drone, Role::Drone, Role::Drone, Role::Drone, Role::Drone],
             _ => &[Role::Hand, Role::Item],
         };
         for &r in roles {
@@ -307,6 +334,7 @@ fn setup(
     commands.insert_resource(PreviewRt {
         parts, extra, chains, bank, menu_cam, canvases: ids, last_frame: 0, player: Player::enter(tables.clone()), tables, hud, base: base as i32,
         model_open: false, made: [-1; 3], props: [None; 3], feet,
+        drones: [false; DRONE_SLOTS], drone_fly: [0.0; DRONE_SLOTS], drone_vel: [0.0; DRONE_SLOTS],
     });
 }
 
@@ -521,7 +549,7 @@ fn update(
         }
         let hand_attach = class_of(mv.equip[0]).map_or(0, |c| c.1.max(0) as usize);
         for (k, p) in rt.parts.iter_mut().enumerate() {
-            if matches!(p.role, Role::Ratchet | Role::Item | Role::ItemClank) || (p.role != Role::Extra && want(p.role) != Some(p.o_class)) { continue; }
+            if matches!(p.role, Role::Ratchet | Role::Item | Role::ItemClank | Role::Drone) || (p.role != Role::Extra && want(p.role) != Some(p.o_class)) { continue; }
             match p.role {
                 Role::Back => {
                     if p.cut_for != p.o_class as i32 {
@@ -567,6 +595,7 @@ fn update(
                     let Some((r, at)) = w_of(BACK_ATTACH, true) else { continue };
                     placed[k] = Some(Placed { rows: r, pos: at, pose: moby_anim::evaluate_with_snapshot(&p.anim, &p.state, None) });
                 }
+                Role::Drone => {}
                 Role::Extra => {
                     let Some(e) = EXTRA_CLASSES.iter().position(|&c| c == p.o_class) else { continue };
                     if !mv.extras[e] { continue; }
@@ -593,9 +622,38 @@ fn update(
                 _ => {}
             }
         }
+        // `LoadHandGadget`'s drones: slot k made while k < 0x141347 (a new one 3 up unless k < 0x141346), deleted after.
+        let (live, alive) = play.as_ref().map_or((0, 0), |p| (p.svc.drones.live as usize, p.svc.drones.count as usize));
+        let drone_parts: Vec<usize> = rt.parts.iter().enumerate().filter(|(_, p)| p.role == Role::Drone).map(|(k, _)| k).collect();
+        for (slot, &k) in drone_parts.iter().enumerate().take(DRONE_SLOTS) {
+            if slot >= live {
+                rt.drones[slot] = false;
+                continue;
+            }
+            if !rt.drones[slot] {
+                rt.drones[slot] = true;
+                rt.drone_fly[slot] = if slot < alive { 0.0 } else { 3.0 };
+                rt.drone_vel[slot] = 0.0;
+                let p = &mut rt.parts[k];
+                p.state = AnimState::spawn(&p.anim);
+            }
+            let dt = rc_game::moby_update::creature::DT;
+            for _ in 0..steps {
+                // `spawn_extra479`: MobyAnimAdvance; the fly-in `fun_00213f38(0, 1, 6·dt², 6·dt)` while not at 0.
+                let p = &mut rt.parts[k];
+                moby_anim::advance(&mut p.state, &p.anim);
+                if rt.drone_fly[slot] != 0.0 {
+                    rc_game::moby_update::creature::turn::spring(0.0, 1.0, 6.0 * dt * dt, 6.0 * dt, &mut rt.drone_fly[slot], &mut rt.drone_vel[slot]);
+                }
+            }
+            let (r, at) = drone_place(slot, gp.frame, rt.drone_fly[slot], pos);
+            let p = &rt.parts[k];
+            placed[k] = Some(Placed { rows: r, pos: at, pose: moby_anim::evaluate_with_snapshot(&p.anim, &p.state, None) });
+        }
     } else {
-        // The widget's leave: the next opening enters anew.
+        // The widget's leave: the next opening enters anew (`LoadHandGadget`'s mobys deleted with the widget).
         rt.model_open = false;
+        rt.drones = [false; DRONE_SLOTS];
     }
     // The item preview.
     if let Some(pv) = view.preview {

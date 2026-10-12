@@ -303,9 +303,10 @@ pub fn grid_update(m: &mut PageMenu, w: u32, inp: &MenuInput, gs: &mut GameState
         match menu_select(&mut m.equip, id, owned, slot) {
             Select::Denied => out.sounds.push(MenuSound::Denied),
             Select::Drone => {
-                // The Drone Device's own path (0x141345 / 0x141347 with its ammo, `FUN_00249530`): not ported.
+                // The Drone Device is never put in the slot: in the pause menu (kind 3) its drones are launched
+                // (`MenuOut::drone`: the ammo test and the globals are the engine's).
                 out.sounds.push(MenuSound::Confirm);
-                *m.stub_calls.entry("drone device 0x249530").or_default() += 1;
+                if m.kind == 3 { out.drone = true; }
             }
             _ => out.sounds.push(MenuSound::Confirm),
         }

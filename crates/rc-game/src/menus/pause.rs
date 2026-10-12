@@ -427,6 +427,10 @@ pub struct MenuOut {
     pub equip: Option<[Option<i32>; 4]>,
     /// ✕ on the Sound page (stereo / mono and the mixer, 0x12e240).
     pub sound_settings: bool,
+    /// ✕ on the Drone Device in the pause menu (kind 3; the Gadgets / Weapons grid 0x28f260): with its ammo
+    /// (`0x249530(0x18)` ≠ 0), 0x141345 = 1 and 0x141347 = min(0x141347 + ammo, 6) (the engine: the session and the
+    /// drones' globals; the 3D Ratchet shows the drones).
+    pub drone: bool,
     /// The transition started / finished this frame.
     pub transition: Option<(u32, u32)>,
     pub entered: Option<u32>,
