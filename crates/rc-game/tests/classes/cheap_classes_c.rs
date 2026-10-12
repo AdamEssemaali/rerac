@@ -647,3 +647,44 @@ fn kalebo_lifts_ride_their_cylinders() {
     for _ in 0..600 { lv.run(&on, lifts[0], unit("U568 1826")); }
     assert_eq!(lv.table.mobys[lifts[0]].position[2], ends[0].1, "ridden to the bottom");
 }
+
+// ---------------------------------------------------------------------------------------------------
+// U495: Oltanis's floats 309
+
+/// The floats' rows are a right-handed frame (`FastVecCross(out, a, b)` = b × a), so their collision faces up: a ray
+/// from above meets the top of the model across the platform. Ratchet standing east of the centre leans the up row
+/// toward him (+x), by at most 10°.
+#[test]
+fn oltanis_floats_are_solid_and_lean_toward_ratchet() {
+    let Some(mut lv) = load(14) else { eprintln!("skipped"); return };
+    let far = hero_at([1.0, 1.0, 1.0]);
+    lv.load_pass(&far);
+    for _ in 0..5 { lv.tick(&far); }
+    let core = rc_formats::test_data::core(14).unwrap();
+    let cl = rc_formats::moby::parse_moby_class(core.block("moby_class/0309").unwrap()).unwrap();
+    let top = cl.high_lod.iter().flat_map(|s| &s.vertices).map(|v| v.packed_position()[2] as f32).fold(f32::MIN, f32::max);
+    let floats = lv.of_class(309);
+    assert_eq!(floats.len(), 4);
+    for &id in &floats {
+        let m = lv.table.mobys[id].clone();
+        let r = m.rows;
+        let cross = [r[0][1] * r[1][2] - r[0][2] * r[1][1], r[0][2] * r[1][0] - r[0][0] * r[1][2], r[0][0] * r[1][1] - r[0][1] * r[1][0]];
+        assert!((0..3).all(|k| (cross[k] - r[2][k]).abs() < 1e-5), "row 0 × row 1 = row 2: {r:?}");
+        let parts = lv.svc.scene_parts(&lv.table, &lv.classes);
+        let sc = lv.svc.scene(&parts);
+        for dx in [0.0f32, 1.0, 2.0] {
+            let (a, b) = ([m.position[0] + dx, m.position[1], m.position[2] + 6.0], [m.position[0] + dx, m.position[1], m.position[2] - 6.0]);
+            let h = rc_game::collision_query::coll_line_m(&lv.mesh, Some(&sc), a, b, rc_game::collision_query::QueryFlags(0), None).expect("the top");
+            assert_eq!(h.moby, Some(id));
+            assert!((h.point[2] - (m.position[2] + top * m.scale / 1024.0)).abs() < 1e-3, "{dx}: {:?}", h.point);
+        }
+    }
+    let id = floats[0];
+    let p = lv.table.mobys[id].position;
+    let mut on = hero_at([p[0] + 1.0, p[1], p[2] + 0.7]);
+    on.ground_moby = Some(id);
+    for _ in 0..300 { lv.run(&on, id, unit("U495 309")); }
+    let up = lv.table.mobys[id].rows[2];
+    assert!(up[0] > 0.1 && up[1].abs() < 1e-3, "leans toward +x: {up:?}");
+    assert!(up[2] >= (10.0f32 * 0.017_453_292).cos() - 1e-3, "at most 10°: {up:?}");
+}

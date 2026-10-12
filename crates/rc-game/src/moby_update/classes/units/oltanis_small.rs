@@ -7,7 +7,7 @@
 //! * **309 the floats** (`0x2de1f8`, the tilt `0x2de2b8`, U495, 4 placed): platforms 0.35 above their placement whose
 //!   up row leans toward Ratchet while he stands on (or hangs from) it, by up to 10° (gp−0x5100) about the axis across
 //!   his offset (0.1 more height: 2, gp−0x50fc), springing back level when he leaves (`Spring(·, 0.005, 0.2, 0)` per
-//!   component, the rows rebuilt from it: right = (1, 0, 0) × up); a lean change starts the class sound 0 (flags 8)
+//!   component, the rows rebuilt from it: row 1 = up × (1, 0, 0), row 0 = row 1 × up); a lean change starts the class sound 0 (flags 8)
 //!   at most every `ticks(60)`. The platform block +0x20 carries nothing (no motion).
 //!
 //! * **643 the floating mines** (`0x2ec810`, U499, 5 placed): drift along their path +0x60 (its chords into the points'
@@ -130,7 +130,8 @@ fn lean(w: &mut World, id: MobyId) {
             if l != 0.0 {
                 let a = (c::dot3(up, v) / l).clamp(-1.0, 1.0).asin();
                 let tilt = (std::f32::consts::FRAC_PI_2 - a).min(10.0 * 0.017_453_292);
-                let axis = [v[1] * up[2] - v[2] * up[1], v[2] * up[0] - v[0] * up[2], v[0] * up[1] - v[1] * up[0]];
+                // `FastVecCross(axis, d, up)` = up × d (`FastVecCross(out, a, b)` 0x2212d0 = b × a).
+                let axis = [up[1] * v[2] - up[2] * v[1], up[2] * v[0] - up[0] * v[2], up[0] * v[1] - up[1] * v[0]];
                 let r = crate::moby_update::classes::blaster_shot::rotate([up[0], up[1], up[2]], tilt, axis);
                 t = c::set_len3([r[0], r[1], r[2], up[3]], 1.0);
             }
@@ -152,9 +153,11 @@ fn lean(w: &mut World, id: MobyId) {
         c::set_pf(w, id, 0x60 + 4 * k, v.to_f32());
     }
     let r2 = c::set_len3(r2, 1.0);
+    // Row 1 = `FastVecCross(row1, (1, 0, 0), up)` = up × (1, 0, 0), row 0 = `FastVecCross(row0, up, row1)` = row 1 × up: a
+    // right-handed frame (with a × b the rows mirrored y, turning the class's collision inside out).
     let x = [1.0f32, 0.0, 0.0];
-    let r1 = c::set_len3([x[1] * r2[2] - x[2] * r2[1], x[2] * r2[0] - x[0] * r2[2], x[0] * r2[1] - x[1] * r2[0], 0.0], 1.0);
-    let r0 = [r2[1] * r1[2] - r2[2] * r1[1], r2[2] * r1[0] - r2[0] * r1[2], r2[0] * r1[1] - r2[1] * r1[0], 0.0];
+    let r1 = c::set_len3([r2[1] * x[2] - r2[2] * x[1], r2[2] * x[0] - r2[0] * x[2], r2[0] * x[1] - r2[1] * x[0], 0.0], 1.0);
+    let r0 = [r1[1] * r2[2] - r1[2] * r2[1], r1[2] * r2[0] - r1[0] * r2[2], r1[0] * r2[1] - r1[1] * r2[0], 0.0];
     let m = w.mm(id);
     m.rows[0] = r0;
     m.rows[1] = [r1[0], r1[1], r1[2], 0.0];
