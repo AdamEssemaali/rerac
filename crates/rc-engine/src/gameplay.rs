@@ -570,8 +570,6 @@ pub struct Play {
     class: usize,
     scale: f32,
     slots: u32,
-    light_word: u32,
-    ambient: [u8; 3],
     /// His moby as the level places it, for respawns.
     spawn_moby: Moby,
     extra: ExtraMobys,
@@ -1486,7 +1484,6 @@ fn setup(
     }
     let dynamic = DynMobys::new(lv, game.mobys.mobys.len() - n_static, &mut buffers);
 
-    let inst = &m.instances[hero_ii];
     let h = &game.hero;
     let mut per_class: std::collections::BTreeMap<i16, usize> = std::collections::BTreeMap::new();
     for &(id, _, _) in &driven { *per_class.entry(game.mobys.mobys[id].o_class).or_default() += 1; }
@@ -1513,8 +1510,6 @@ fn setup(
         class: placed.class,
         scale: placed.scale,
         slots,
-        light_word: inst.light_word(),
-        ambient: inst.ambient_rgb(),
         spawn_moby,
         extra,
         entities,
@@ -2550,7 +2545,8 @@ fn upload(
     let f = moby_anim::evaluate_posed(class, &p.ratchet.state, p.ratchet.snapshot.as_ref(), &layers, &hm.joint_mods);
     for (k, b) in f.iter().take(p.slots as usize).flat_map(|r| r.iter().flatten().flat_map(|v| v.to_le_bytes())).enumerate() { palette[k] = b; }
     let rows = rows_bits(&hm.rows);
-    let lights = lv.mobys.lighting.as_ref().map(|l| light::moby_lights(&rows, &l.bank, p.light_word, p.ambient, 0x80));
+    // His light words +0x38 / +0x3c as `HeroEnvLighting` left them (the fog zone's light sets, the static light's ambient).
+    let lights = lv.mobys.lighting.as_ref().map(|l| light::moby_lights(&rows, &l.bank, hm.light, [hm.ambient[0], hm.ambient[1], hm.ambient[2]], 0x80));
     let model = moby_render::extra_model(rows3(&hm.rows), p.scale, [hm.position[0], hm.position[1], hm.position[2]]);
     let mut record = moby_render::extra_record(&model, lights.as_ref(), 0);
     moby_render::write_point_light(&mut record, moby_render::point_light_merge(&point_lights.0, sphere_centre(hm), &rows3(&hm.rows)));

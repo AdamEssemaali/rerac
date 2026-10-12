@@ -500,6 +500,11 @@ fn place(a: &mut MobyAttach, host_class: &MobyAnimClass, host: &AnimState, snap:
 /// and Clank, with Clank's fidgets); the back items are placed here.
 fn update(attach: Option<ResMut<MobyAttach>>, anim: Option<Res<MobyAnim>>, level: Res<crate::Level>, play: Option<Res<crate::gameplay::Play>>) {
     let (Some(mut a), Some(anim)) = (attach, anim) else { return };
+    // `FUN_0022fec0`: every item copies Ratchet's +0x38..0x3f (light sets, cross-fade, ambient) every frame, so they
+    // follow `HeroEnvLighting`.
+    if let Some(m) = play.as_ref().and_then(|p| p.game.mobys.mobys.get(p.game.hero_moby)) {
+        (a.host_light, a.host_ambient) = (m.light, [m.ambient[0], m.ambient[1], m.ambient[2]]);
+    }
     let hand = play.as_ref().map(|p| p.game.hero.items.slot.item.clone());
     // First person (0x1413f5): `0x2486c0` hides Ratchet's items, the thrown wrench excepted; so does every tick of another
     // body (`0x22a110` → `0x2486c0`, rc_game::hero::bodies: Clank or Giant Clank is the hero, Ratchet and his items hidden).
