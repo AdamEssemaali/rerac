@@ -106,7 +106,10 @@ static SHIP: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1
 
 /// 0x160540: a placed ship was adopted (`rc_game::travel::ship::adopt`, Gemlik's 533 after the escape). The game never
 /// clears it: it holds for the session (not in the save).
-pub fn ship_adopted() -> bool { SHIP_ADOPTED.load(std::sync::atomic::Ordering::Relaxed) }
+/// `RC_SHIP_ADOPTED=1` starts with it set (debug: a level-13 load with `RC_SHIP=2` adopts the placed 533 at once).
+pub fn ship_adopted() -> bool {
+    SHIP_ADOPTED.load(std::sync::atomic::Ordering::Relaxed) || std::env::var("RC_SHIP_ADOPTED").is_ok_and(|v| v.trim() == "1")
+}
 pub fn set_ship_adopted() { SHIP_ADOPTED.store(true, std::sync::atomic::Ordering::Relaxed); }
 
 static SHIP_ADOPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

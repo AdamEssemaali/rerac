@@ -1997,9 +1997,18 @@ fn debug_dump(
         if d > radius { continue; }
         let (sv, st) = visible.get(&(id as u32)).copied().unwrap_or((0, 0));
         println!(
-            "dump:   moby {id:4} class {:5} state {:#04x} mode {:#06x} coll {} pos ({:.2}, {:.2}, {:.2}) dist {:.1} meshes {sv}/{st} visible",
-            m.o_class, m.state, m.mode, m.has_collision, m.position[0], m.position[1], m.position[2], d
+            "dump:   moby {id:4} class {:5} state {:#04x} mode {:#06x} coll {} pos ({:.2}, {:.2}, {:.2}) dist {:.1} meshes {sv}/{st} visible (+0x31 {} alpha {:#04x} draw dist {} occlusion {:#06x})",
+            m.o_class, m.state, m.mode, m.has_collision, m.position[0], m.position[1], m.position[2], d, m.visible, m.alpha, m.draw_dist, m.occlusion
         );
+    }
+    // The ship (`ShipUpdate`'s moby 0x13e030): its glass registration and the joint-list-0 matrix the glass is drawn at.
+    let cbs = &p.svc.draw_callbacks;
+    if let Some(id) = p.svc.travel.moby {
+        let glass = cbs.list1.iter().chain(&cbs.list2).any(|&(c, i)| i == id && c == rc_game::moby_update::classes::draw_callbacks::Callback::ShipGlass);
+        let o = p.game.mobys.mobys.get(id).map_or(-1, |m| m.o_class);
+        let lists = p.svc.joint_lists.get(&o).map(|l| l.iter().map(|c| c.len()).collect::<Vec<_>>());
+        let at = cbs.matrices.get(&id).map(|m| format!("({:.2}, {:.2}, {:.2})", m[3][0], m[3][1], m[3][2]));
+        println!("dump: ship moby {id} class {o} ship {} adopted {} glass registered {glass} at {} joint lists {lists:?} engine ship {:?}", p.svc.travel.ship, p.svc.travel.adopted, at.unwrap_or_else(|| "-".into()), p.ship);
     }
 }
 

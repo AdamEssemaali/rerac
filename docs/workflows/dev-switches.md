@@ -83,6 +83,7 @@ module that reads it: `grep -rn '"RC_' crates/` lists them all.
 | `RC_GIVE_ITEMS` | `id,id,…` (decimal or `0x` hex): own those items from the start (debug; `rc_game::inventory::debug_grant`, docs/plan/gadgets.md §6); the last back (2 Heli-Pack, 3 Thruster-Pack, 4 Hydro-Pack), feet (28 Magneboots, 29 Grindboots) and head item (5..7) among them are saved as equipped, and the last hand item (e.g. 12, the Swingshot) is requested into the hand. Unset: the game's own starting state |
 | `RC_GIVE_ITEMS_EQUIP` | `0`: `RC_GIVE_ITEMS` only owns the items (nothing equipped; equip them in the pause menu's Gadgets page) |
 | `RC_HERO_AT` | `x,y,z[,yaw]`: place Ratchet there at the level load, before the hero init's ground snap (debug; e.g. on a grind rail with `RC_GIVE_ITEMS=29`) |
+| `RC_SHIP_ADOPTED` | `1`: a placed ship was adopted (0x160540) from the start: level 13 with `RC_SHIP=2` takes Gemlik's placed 533 as the ship at the load, as after the escape (debug) |
 | `RC_LEVEL_CAMERAS` | `0`: do not load the level's camera records (no class-17 regions: the follow camera alone, as before `rc_game::follow_camera::level`; for before / after comparisons) |
 | `RC_GIVE_BOLTS` | `n`: start with n bolts (debug; e.g. to buy at the Gadgetron vendor) |
 | `RC_GIVE_GOLD_BOLTS` | `n`: n gold bolts collected from the start (debug; e.g. to buy a gold weapon on Novalis) |

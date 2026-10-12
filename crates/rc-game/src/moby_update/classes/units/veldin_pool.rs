@@ -124,7 +124,11 @@ pub fn update(w: &mut World, id: MobyId) {
             w.svc.units.set_word(COUNT_WORD, 0);
             let pv = &w.m(id).pvars;
             let (full, drained) = (p::ff(pv, FULL), p::ff(pv, DRAINED));
-            let drain = start == 0 || w.hero.gadgets.hydro_full;
+            // 0x141400 as state 0 left it: its store is a queued hero write the tick applies after the moby loop, and
+            // after a death reload the load pass's store is still queued when this runs (read as empty, the pool
+            // started full under a full gadget, the way on blocked).
+            let gadget_full = w.hero_fields().hydro_full.unwrap_or(w.hero.gadgets.hydro_full);
+            let drain = start == 0 || gadget_full;
             let m = w.mm(id);
             if drain {
                 m.state = 3;
