@@ -305,10 +305,11 @@ pub fn find_bait(w: &mut World, id: MobyId) -> Option<MobyId> {
     if c::pi16(w, id, o::BAIT_SEEN) != 0 || bd <= 8.0 { best } else { None }
 }
 
-/// `0x299ff8`: no other live guard of the group idle at a lower patrol point (its turn).
+/// `0x299ff8`: no other live guard of the group idle at a lower patrol point (its turn); a guard with no group
+/// (+0x21 = 0xff) always has its turn.
 pub fn my_turn(w: &World, id: MobyId) -> bool {
     let g = w.m(id).group;
-    if g == -1 { return false; }
+    if g == -1 { return true; }
     let mine = c::pi32(w, id, o::POINT);
     for m in crate::moby_update::scheduler::group_ids(w, g) {
         let mo = w.m(m);
