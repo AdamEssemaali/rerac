@@ -63,6 +63,7 @@ module that reads it: `grep -rn '"RC_' crates/` lists them all.
 | `RC_FOG` | `0`: disable fog |
 | `RC_NO_LIGHT` | `1`: skip the load-time lighting passes (tfrag, tie, shrub, moby); stored colours used |
 | `RC_WORLD_LIGHTS` | `0`: point lights (explosions) do not relight tfrags, ties and shrubs |
+| `RC_MAP_TRACE` | `1`: one line whenever the level's map state moves (into the page menu, back, or lost: a blank map page), with the frame, tick and mode (`menu_render::map_trace`) |
 | `RC_WORLD_LIGHTS_TRACE` | `1`: print, every frame, the frame time, the point-light bank and the listed tfrag / tie / shrub counts |
 | `RC_LOD` | `0`: force tfrag LOD 0 |
 | `RC_LOD_TINT` | `1`: tint tfrag LOD 1 red, LOD 2 blue, clipping path green |

@@ -72,7 +72,8 @@
 //! settings file. The anti-aliasing row offers only the sample counts the GPU supports ([`SupportedMsaa`]; ✕ skips the
 //! rest, e.g. 8x on Apple M-series).
 //!
-//! Environment: `RC_MENU_TRACE=1` prints menu events (open, transitions, sounds, equip requests, close);
+//! Environment: `RC_MENU_TRACE=1` prints menu events (open, transitions, sounds, equip requests, close); `RC_MAP_TRACE=1`
+//! prints where the level's map state is ([`map_trace`]: in the level, in the menu, or lost) whenever that changes;
 //! `RC_SETTINGS_PAGE=0` leaves the Options page as on the disc (no Port Options entry).
 
 use crate::gameplay::{Persistent, Play, Session};
@@ -233,6 +234,7 @@ impl Plugin for MenuPlugin {
             // memcard_Update + the card monitor after the mode's update, every frame (crate::saves).
             .init_resource::<crate::saves::FrontEndRt>()
             .add_systems(FixedUpdate, crate::saves::card_frame.after(menu_frame))
+            .add_systems(FixedUpdate, map_trace.after(menu_frame))
             .add_systems(FixedUpdate, return_page_reopen.before(crate::gameplay::GameTick))
             .add_systems(Update, (target_main_camera, build_prims).chain().in_set(MenuPrims).before(HudBuild))
             .add_systems(PostUpdate, menu_layer.before(TransformSystems::Propagate).in_set(crate::display::ResizeTargets))
@@ -901,6 +903,27 @@ fn menu_frame(
     }
     mm.state.end_frame();
     mm.loop_frame += 1;
+}
+
+/// `RC_MAP_TRACE=1`: the level's map state (moved into the page menu while it is open and back on its close) as one line
+/// per change: whether the level holds the map file, whether the menu does, the mode, the main-loop frame and the game
+/// tick. A blank map page after something is a map state the level lost: the line before shows what ran.
+fn map_trace(rt: Option<Res<MenuRt>>, mm: Res<MenuMode>, play: Option<Res<Play>>, mut last: Local<Option<(bool, bool, i32)>>) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var("RC_MAP_TRACE").is_ok_and(|v| v.trim() == "1")) { return; }
+    let Some(play) = play else { return };
+    let level = play.svc.map.file.is_some();
+    let menu = rt.as_ref().and_then(|r| r.menu.as_ref()).is_some_and(|m| m.map.state.file.is_some());
+    let now = (level, menu, mm.state.mode.raw());
+    if *last == Some(now) { return; }
+    *last = Some(now);
+    let state = match (level, menu) {
+        (true, false) => "in the level",
+        (false, true) => "in the menu",
+        (true, true) => "in both",
+        (false, false) => "LOST (neither the level nor the menu has it)",
+    };
+    println!("map trace: frame {} tick {}: map state {state}, mode {}, game mode {}", mm.loop_frame, play.game.counter, now.2, play.svc.game_mode);
 }
 
 /// `EnterMenuMode(kind)` 0x28bf50 (the pause triggers, a class's request, the return page): the page menu's entry, the
