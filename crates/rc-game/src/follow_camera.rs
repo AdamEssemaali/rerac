@@ -816,15 +816,18 @@ impl Camera {
         // other camera's activation (the first-person check 0x316880; the follow camera takes over from a released
         // one), the switch `0x20d110` with the new type's init, then the active type's update.
         // With another camera current the loop's checks still run (class 17's regions see it and leave). The script
-        // camera (type 5) is released by `CameraScript2` (script.rs), or switched away from by a winner of the loop as
-        // `0x20d620` switches any (an armed fly-by, class 19: its check passes against every other class; Qwark's crash
-        // camera over Gemlik's ship). The type-6 camera (the missile view) holds until its hand-back `0x317e70`.
+        // camera (type 5) is released by `CameraScript2` (script.rs), or switched away from by an armed fly-by (class
+        // 19: its check answers 1 against every other class whatever the priorities, and `0x20d620` switches any winner;
+        // Qwark's crash camera over Gemlik's ship). [L] Other winners do not take it: their checks weigh the current
+        // camera's priority, which the port does not keep for the script camera (taking them stalled Gemlik's fight).
+        // The type-6 camera (the missile view) holds until its hand-back `0x317e70`.
         let mut switched = None;
         if !self.follow_is_current() && !self.swing.active && !self.class_cam.active {
             let won = self.activation_loop(inp);
             if self.script.active && !self.type6.active {
                 if let (Some(c), Some(slot)) = (won, self.level_cams.won_slot) {
-                    if self.level_cams.ports.runs_class_cam(c) {
+                    let armed_flyby = c == flyby::CLASS_FLYBY && self.flyby_rec(slot).is_some_and(|r| r.armed != 0 && r.done == 0);
+                    if armed_flyby && self.level_cams.ports.runs_class_cam(c) {
                         let p = self.script_view();
                         self.script.active = false;
                         self.script.release = None;
