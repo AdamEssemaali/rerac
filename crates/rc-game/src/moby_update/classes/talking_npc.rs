@@ -19,6 +19,7 @@
 //!   bits and the HUD banner "Infobot for Planet Aridia acquired"), state 3, the save (`crate::cinematic::save`).
 //! * **3**: `DeleteMoby`.
 //! * **4 / 5** (Batalia's turret guy; state 5 moves Ratchet to a fixed point): not ported (counted).
+//! * **7** ("Mystery 774", the other levels): nothing but the head look-at.
 //!
 //! **The head look-at** (every state but 3; [`look_at`], docs/plan/moby_animation.md §9), coverage of 0x2ff3d0..0x2ff734:
 //!
@@ -108,6 +109,8 @@ pub fn update(w: &mut World, id: MobyId) {
             }
         }
         3 => return w.delete_moby(id),
+        // "Mystery 774" (every level but 1 and 8): no talk, only the head look-at below.
+        7 => {}
         _ => w.svc.unported("talking npc: Batalia turret guy states 4/5"),
     }
     look_at(w, id);
