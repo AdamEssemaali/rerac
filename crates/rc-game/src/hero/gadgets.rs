@@ -125,6 +125,8 @@ pub fn hand_item(id: i32) -> Option<&'static HandItemKind> { HAND_ITEMS.iter().f
 pub struct Gadgets {
     /// The slot loop reached the item's update and it is an [`ItemUpdate::Hero`] one: [`after_items`] runs it.
     pub pending: Option<i32>,
+    /// The tick the slot loop deferred it in (`ItemEnv::frame`: the screen markers the update registers).
+    pub pending_tick: u64,
     /// `UpdateWrenchSelected` took 0x141345: the drones' launch `0x2e8c20` is made right after it by the slot loop
     /// ([`launch_drones`]).
     pub drone_launch: bool,
@@ -174,6 +176,7 @@ impl Default for Gadgets {
     fn default() -> Self {
         Gadgets {
             pending: None,
+            pending_tick: 0,
             drone_launch: false,
             hand_joints: [cleared_record(0), cleared_record(1), cleared_record(2)],
             hand_manips: Vec::new(),
@@ -306,7 +309,10 @@ pub(super) fn slot_item_update(hero: &mut Hero, table: &mut MobyTable, anim: &dy
             // The wrench's update belongs to its class (0x47), as before the table.
             if id != super::items::item::WRENCH || hero.items.slot.item.as_ref().is_some_and(|it| it.o_class == 0x47) { f(hero, table, anim, env, hits, rng); }
         }
-        Some(ItemUpdate::Hero(_)) => hero.gadgets.pending = Some(id),
+        Some(ItemUpdate::Hero(_)) => {
+            hero.gadgets.pending = Some(id);
+            hero.gadgets.pending_tick = env.frame as u64;
+        }
         _ => {}
     }
 }

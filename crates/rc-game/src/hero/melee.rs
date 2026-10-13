@@ -26,6 +26,10 @@ use crate::pad::{button, fast_arctan, fast_diff_rots};
 use crate::ps2v::Pf;
 use rc_formats::moby_anim;
 
+/// The wrench's look-stance reticle (`0x2be1c0`): its colour (R low) and FX texture.
+pub const LOOK_MARKER_RGBA: u32 = 0xff91_7267;
+pub const LOOK_MARKER_FX: usize = 0x25;
+
 /// The melee table at 0x17c0a8 (stride 0x2c, indexed by 0x13fdb0): `[kind (0 ground combo, 1 jump attack, 2
 /// comet), step, chain-before, input-ref, chain-from, jump-after, idle-after, hit-from, hit-to, +0x24,
 /// +0x28]`, frames of Ratchet's sequence. Rows 0..2 = combo swings 0x17..0x19, 3 = comet 0x1a, 4 = jump attack 0x2b,
@@ -498,6 +502,12 @@ pub fn wrench_update(hero: &mut Hero, table: &mut MobyTable, anim: &dyn AnimCtl,
     match hero.items.slot.item.as_ref().map_or(0, |m| m.mstate) {
         super::comet::OUT | super::comet::BACK => return super::comet::thrown_update(hero, table, anim, env, hits, rng),
         _ => {}
+    }
+    // The look stance's reticle (0x2be1c0 in hand): state 1 with R1 / R2 held (0x13cae0 & 0xa), the screen-centre marker
+    // `FUN_0020fb60(1.0, 0, 90°, wrench, 0xff917267, none, 0x25, −1, 4)` the Comet-Strike's first-person throw aims by.
+    if st == 1 && env.pad.held & (button::R1 | button::R2) != 0 {
+        let m = crate::targeting::Marker { size: 1.0, angle: 0.0, rgba: LOOK_MARKER_RGBA, at: None, fx: LOOK_MARKER_FX };
+        hero.weapons.markers.register(env.frame as u64, m);
     }
     {
         let it = hero.items.slot.item.as_mut().unwrap();

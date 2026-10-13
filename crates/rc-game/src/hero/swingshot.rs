@@ -61,7 +61,7 @@
 //! (swing) per tick; below 0.168 the hook holds (pull: SetState 0x25; swing: 0x13fcec = 1). Afterwards it
 //! retracts at 80 u/s. Item anims 1 (idle), 3 (fire), 4 (hooked); class sounds 0 (fire), 1 (hit), 2 (pull), queued
 //! in [`SwingItem::sounds`] and played right after the item's update (`super::gadgets::flush_item_sounds`). In the look
-//! stance it turns 1 into 0x1e (its aiming beams `0x20fb60` are not drawn).
+//! stance it turns 1 into 0x1e and registers its screen markers (`0x20fb60`: the red centre, the green target).
 //!
 //! The targets' glints are type-60 particles (`moby_update::classes::swing_target`). **Not ported:**
 //! their camera hint `0x2eb4c0` (the camera's look-at record 0x167100); the targeted swing from a grind rail
@@ -80,6 +80,11 @@ use crate::rng::Rng;
 
 /// Item id (`0x13d4c0 + 12`).
 pub const SWINGSHOT: i32 = 12;
+/// The look stance's markers: the red centre one and the green target one (R low), FX 0x24.
+const MARKER_RED: u32 = 0xff00_00ff;
+const MARKER_GREEN: u32 = 0xff00_ff00;
+const MARKER_FX: usize = 0x24;
+
 /// The hand item's class (item definition 12 `+0x10`) and the hook's (`CreateMoby(0xd1)` in `0x2dcbf0`).
 pub const SWINGSHOT_CLASS: i16 = 0xd0;
 pub const HOOK_CLASS: i16 = 0xd1;
@@ -905,6 +910,22 @@ pub(super) fn item_update(h: &mut Hero, c: &mut Ctx, data: &ItemData) {
     if h.swing.item.hook.is_none() {
         let rows = h.items.slot.item.as_ref().map(|it| it.rows.map(|r| r.map(f32::from_bits))).unwrap_or_default();
         h.swing.item.hook = Some(Hook { pos: joint, rows, speed: DTF * 24.0 });
+    }
+    // The look stance's markers (0x2dbdc0 after the hook, in 1 / 0x1e from its second tick): the red one at the screen
+    // centre (`FUN_0020fb60(1.0, 0, 90°, item, 0xff0000ff, none, 0x24, −1, 4)`), then a green half-size one on the
+    // usable pull target, else on the swing target.
+    if (h.state == 1 || h.state == 0x1e) && 2 <= h.timer {
+        use crate::targeting::Marker;
+        let tick = h.gadgets.pending_tick;
+        h.weapons.markers.register(tick, Marker { size: 1.0, angle: 0.0, rgba: MARKER_RED, at: None, fx: MARKER_FX });
+        let green = |at: V3| Marker { size: 0.5, angle: 0.0, rgba: MARKER_GREEN, at: Some(at), fx: MARKER_FX };
+        if h.swing.pull_ok && h.swing.pull.is_some() {
+            let at = target_pos(c.env, h.swing.pull, h.swing.pull_pos);
+            h.weapons.markers.register(tick, green(at));
+        } else if h.swing.swing.is_some() {
+            let at = target_pos(c.env, h.swing.swing, h.swing.swing_pos);
+            h.weapons.markers.register(tick, green(at));
+        }
     }
     let pull_t = target_pos(c.env, h.swing.pull, h.swing.pull_pos);
     let on_t = target_pos(c.env, h.swing.on, h.swing.on_pos);

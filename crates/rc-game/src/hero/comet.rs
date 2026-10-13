@@ -36,7 +36,7 @@
 //! Native `f32` for the flight (the moby side); the state code keeps the hero block's PS2 float type at its
 //! boundary. The after-images of 0x140b00 (`0x277400` / `0x277428` at the throw,
 //! `0x277508` each flight tick, `0x277740` at the catch) are `crate::afterimage`'s. The bounce going out makes the hit burst `0x2bdd20` (`super::fx::wrench_burst`) at the
-//! line's hit point. **Not ported**: the look stance's aiming beam `0x20fb60`, the burst's sparkles `0x2bdb18` (type 53,
+//! line's hit point. The look stance's reticle (`0x20fb60`, R1 / R2 held) is `super::melee::wrench_update`'s. **Not ported**: the burst's sparkles `0x2bdb18` (type 53,
 //! two per call; made when the wrench's s16 pvar +0x78 is 0x2b, whose writer is not found yet), the hit-record checks of the hit sound (`FUN_002711f8` records of the
 //! same throw, target type 0x14), and the world line's moby part (the port's line is the world mesh: a non-crate
 //! moby does not bounce the wrench; it is still hit by the sphere).
@@ -709,5 +709,28 @@ mod tests {
         assert!(voices.contains(&LOOK_THROW_VOICE), "voices {voices:?}");
         // No camera line target here: the camera's yaw and 7° above its pitch.
         assert!((it.flight.dir[2] - f32::from_bits(0x3dfa_35dd).sin()).abs() < 1e-4, "{:?}", it.flight.dir);
+    }
+
+    /// The look stance with R1 / R2 held shows the wrench's reticle (0x2be1c0: the screen-centre marker, FX 0x25);
+    /// without them, none.
+    #[test]
+    fn look_stance_reticle_with_r2() {
+        let run = |held: u32| {
+            let mut h = Hero::spawn([410.0, 410.0, 100.0], 0.0);
+            h.state = 1;
+            h.items.slot = items::HandSlot { item: Some(wrench()), fire_mask: button::SQUARE, state: 2, id: 8, ..Default::default() };
+            let d = data();
+            let mut pad = crate::pad::PadState::default();
+            pad.update(Some(&PadInput::neutral().press(held).bytes()), false);
+            let mut table = crate::moby_runtime::MobyTable::new(vec![crate::moby_runtime::Moby::zeroed()], 4);
+            let anim = KeyAnim::default();
+            let env = ItemEnv { data: &d, pad: &pad, frame: 7, hero_moby: 0, coll: None, camera: None, camera_up: None, targets: &[] };
+            super::super::melee::wrench_update(&mut h, &mut table, &anim, &env, &mut NoHits, &mut Rng::new());
+            h.weapons.markers.of_tick(7).to_vec()
+        };
+        assert!(run(button::L1).is_empty(), "a reticle without R1 / R2");
+        let m = run(button::L1 | button::R2);
+        assert_eq!(m.len(), 1);
+        assert_eq!((m[0].fx, m[0].rgba, m[0].at, m[0].size), (super::super::melee::LOOK_MARKER_FX, super::super::melee::LOOK_MARKER_RGBA, None, 1.0));
     }
 }
