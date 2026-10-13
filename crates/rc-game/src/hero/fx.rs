@@ -433,7 +433,7 @@ pub fn wrench_sparkles(h: &mut Hero, rng: &mut Rng, mut point: [f32; 3], n: i32)
         let a = rng.rand_angle();
         let p = rng.randf(f32::from_bits(0x3eb2_b8c2), f32::from_bits(0x3fc4_9809));
         let v = polar(rng.randf(0.05, 0.1), a, p);
-        for k in 0..3 { point[k] += rng.randf_sym(0.0, 0.15); }
+        for c in &mut point { *c += rng.randf_sym(0.0, 0.15); }
         let pos = [point[0], point[1], point[2], w];
         let life = crate::hero::physics::ticks(30);
         let vel = [v[0], v[1], v[2]];
