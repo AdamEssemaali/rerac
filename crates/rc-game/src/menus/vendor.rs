@@ -969,26 +969,30 @@ impl Vendor {
     /// The popup's text `FUN_002b2848(popup, w, h)` (centred in the popup's rectangle `size`).
     fn draw_popup(&self, a: &MenuAssets, gs: &GameState, size: (i32, i32), out: &mut Vec<MenuDraw>) {
         let Some(e) = self.current() else { return };
-        let w = size.0;
-        let centre = |out: &mut Vec<MenuDraw>, id: i32, y: i32| {
-            let t = a.msg(id);
-            text(out, Font::Small, (w - small_width(a, t)) / 2, y, WHITE, t);
+        let (w, h) = size;
+        // `font_print_window_small` on the window (0..h, 0..w, anchor (w/2, `y`), 16-pixel lines): the message wrapped to
+        // the popup, its lines centred; flags 3 (the maxed / can't-afford messages at y h/2, 0x2b2b90) also centre the
+        // block, flags 1 ("How many?" from y 6) not.
+        let window = |out: &mut Vec<MenuDraw>, id: i32, y: i32, flags: u16| {
+            let win = crate::hud::text::Window::new(0, h as i16, 0, w as i16, (w / 2) as i16, y as i16, 0x10, flags);
+            out.push(MenuDraw::Hud(crate::hud::Draw::TextWindow { font: Font::Small, window: win, rgba: WHITE, text: a.msg(id).to_vec() }));
         };
+        use crate::hud::text::{CENTRE_BLOCK, CENTRE_LINES};
         let bolts = gs.global.bolts;
         if e.ammo && self.full(gs, e.item) {
-            centre(out, msg::MAXED, 24);
+            window(out, msg::MAXED, h / 2, CENTRE_LINES | CENTRE_BLOCK);
         } else if !e.ammo {
             if self.price(gs, e.item) <= bolts {
                 text(out, Font::Small, 6, 6, WHITE, a.msg(msg::PURCHASE));
                 text(out, Font::Small, 2, 0x20, WHITE, a.msg(msg::YES));
                 text(out, Font::Small, 2, 0x3e, WHITE, a.msg(msg::NO));
             } else {
-                centre(out, msg::CANT_AFFORD, 24);
+                window(out, msg::CANT_AFFORD, h / 2, CENTRE_LINES | CENTRE_BLOCK);
             }
         } else if bolts < self.ammo_unit(e.item) {
-            centre(out, msg::CANT_AFFORD, 24);
+            window(out, msg::CANT_AFFORD, h / 2, CENTRE_LINES | CENTRE_BLOCK);
         } else {
-            centre(out, msg::HOW_MANY, 6);
+            window(out, msg::HOW_MANY, 6, CENTRE_LINES);
             let q = format!("{}", self.qty).into_bytes();
             let qx = if self.qty >= 100 { 23 } else if self.qty >= 10 { 30 } else { 37 };
             text(out, Font::Small, qx, 50, WHITE, &q);
