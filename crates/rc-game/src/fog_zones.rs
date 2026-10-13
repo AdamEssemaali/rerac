@@ -288,6 +288,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_static_light_is_found_at_its_centre() {
+        // The grid lives past its section's 0x10-byte header (the loader's 0x15fbc0): read from the section start,
+        // the cells were off by four and almost no lamp lit Ratchet (Novalis 0 of 17).
+        let mut seen = 0;
+        for level in 0..19 {
+            let Some(gp) = rc_formats::test_data::gameplay(level) else { continue };
+            let s = rc_formats::gameplay::parse_static_lights(&gp).unwrap();
+            for (i, l) in s.lights.iter().enumerate() {
+                assert!(static_light(&s, [l.pos[0], l.pos[1], l.pos[2]]).is_some(), "level {level}: light {i} not found at its centre");
+                seen += 1;
+            }
+        }
+        if seen == 0 { eprintln!("skipped: no extracted/"); }
+    }
+
+    #[test]
     fn hero_ambient_from_base_and_static_light() {
         use rc_formats::gameplay::{StaticLight, StaticLights};
         // One light at (40, 40), r² = 16, red 0x80 alpha 0; cell (2, 2) lists it.

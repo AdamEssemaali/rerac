@@ -432,9 +432,9 @@ pub struct StaticLight {
     pub rgba: u32,
 }
 
-/// The level's static point lights and their grid (section `point_light_grid`, the loader's pointer 0x15fbc0): 64 × 64
-/// cells of 16 units (word `(y >> 4)·64 + (x >> 4)`: the byte offset in the section of the cell's list `s32 count,
-/// count × s32 light index`, 0 = none), kept as the section's words.
+/// The level's static point lights and their grid (section `point_light_grid` past its 0x10-byte header, the loader's
+/// pointer 0x15fbc0): 64 × 64 cells of 16 units (word `(y >> 4)·64 + (x >> 4)`: the byte offset from the cells' start
+/// of the cell's list `s32 count, count × s32 light index`, 0 = none), kept as words.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StaticLights {
     pub lights: Vec<StaticLight>,
@@ -456,8 +456,11 @@ pub fn parse_static_lights(gameplay: &[u8]) -> Result<StaticLights> {
             out.lights.push(StaticLight { pos: [f(0)?, f(1)?, f(2)?, f(3)?], rgba: b.u32(o + 0x10)? });
         }
     }
+    // A 0x10-byte header (the lists' size, pad[3]) before the cells: `InitLevelRenderGlobals` copies from +0x10 and
+    // 0x15fbc0 points there, so the cells and the lists' offsets are relative to +0x10.
     if let Some(r) = range("point_light_grid") {
-        out.grid = gameplay[r].as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect();
+        let body = gameplay.get(r.start + 0x10..r.end).unwrap_or(&[]);
+        out.grid = body.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect();
     }
     Ok(out)
 }
