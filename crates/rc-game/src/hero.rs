@@ -356,6 +356,8 @@ pub struct Hero {
     pub f13f8: u8,
     pub f13f9: u8,
     pub f13fa: u8,
+    /// 0x141618: the weapon arm is raised at a wall this tick (`0x22b700`, [`idle`]: joint record 9).
+    pub arm_at_wall: bool,
     /// 0x141403: gravity mode (0 = normal −Z).
     pub gravity_mode: u8,
     /// 0x1415e0: stop decel; **0x1415ec: stick magnitude** (min(|s|, 1), one tick late); 0x1415f4.
@@ -542,7 +544,7 @@ impl Hero {
             pos_hist: [v; HISTORY], pos_hist_idx: 0, pos_hist_count: 0,
             yaw_hist: [z; HISTORY], yaw_hist_idx: 0, yaw_hist_count: 0, stick: [z, z],
             state: 0, substate: 0, group: 0, prev_state: 0, prev_group: 0, prev_timer: 0, prev_prev_group: 0,
-            mode: 0, f13f8: 0, f13f9: 0, f13fa: 0, gravity_mode: 0,
+            mode: 0, f13f8: 0, f13f9: 0, f13fa: 0, arm_at_wall: false, gravity_mode: 0,
             stop_decel: z, stick_mag: z, f15f4: z, health: 4, f063a: 0, fidget_timer: 0, jump_lockout: 0, land_run_blend: 0, f15d4: 0, prev_prev_state: 0,
             moby_rows: physics::euler_rows(v), moby_rot: v, f0632: 0, f0634: 0, f0637: 0, knock: [z; 3],
             cap_radius_vel: z, f548: 0, nudge_timer: 0, nudge_speed: z, last_ground_point: v, water_level: z,

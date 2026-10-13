@@ -201,16 +201,18 @@ pub mod joint {
     /// Records 6 / 7 (lists 7 / 8): the legs' slope tilt (`0x22c5c0`).
     pub const LEG_L: usize = 6;
     pub const LEG_R: usize = 7;
+    /// Record 9 (list 12, the weapon arm): raised at a wall (`0x22b700`, [`super::Hero::arm_at_wall`]).
+    pub const ARM: usize = 8;
     /// Record 12 (list 21): follows the head look (/2.8, ×0.25).
-    pub const REC12: usize = 8;
+    pub const REC12: usize = 9;
     /// Records 13..16 (lists 25..28): the idle secondaries; the lean's y / z.
-    pub const SECONDARY: usize = 9;
+    pub const SECONDARY: usize = 10;
     /// Record 17 (list 24): scale from 0x15ee14.
-    pub const REC17: usize = 13;
+    pub const REC17: usize = 14;
     /// Record 18 (kind 1: Clank's list 0): the walk's sway of Clank on the back (`0x235e60`).
-    pub const CLANK0: usize = 14;
+    pub const CLANK0: usize = 15;
     /// The records the port models.
-    pub const COUNT: usize = 15;
+    pub const COUNT: usize = 16;
 }
 
 /// A node of Ratchet's joint-modifier list (moby `+0x64`) in the order the game links them (`AttachManipulator`
@@ -338,6 +340,7 @@ impl Idle {
                 JointRec::new(5, 23, 0x3dcc_cccd, 0x3e99_999a),
                 JointRec::new(6, 7, 0x3dcc_cccd, 0x3e99_999a),
                 JointRec::new(7, 8, 0x3dcc_cccd, 0x3e99_999a),
+                JointRec::new(9, 12, 0, 0),
                 JointRec::new(12, 21, 0x3df5_c28f, 0x3e99_999a),
                 JointRec::new(13, 25, 0x3c75_c28f, 0x3e99_999a),
                 JointRec::new(14, 26, 0x3c75_c28f, 0x3e99_999a),
@@ -902,12 +905,48 @@ impl Hero {
     // --------------------------------------------------------------------------------------------
     // The sub-updates after the transitions (mode 0).
 
-    /// `0x22c5c0`, `0x22b928`, `HeroScanTargets`, `0x22bdd0`, `0x227590`, `0x2278c0`, `0x2352e0` and the joint springs
-    /// `0x2273d0`, in the hero update's order (`counter` = 0x15f5cc; Ratchet's sequence B after the transitions from
-    /// `anim`). (`0x22b700`, the arm lowered at a wall, record 9: not ported, 0x141618 is never set.)
+    /// `0x22b700`: the weapon arm raised at a wall. 0x141618 = 0; with a weapon arm (0x1413fb) and not item 0x1a in hand:
+    /// in state 0x81 record 9 (list 12) pitches to −20° (spring 0.05 / 0.3); then the line `0x22b628(h, l)` (flags 2,
+    /// from the capsule radius − 0.02 to `l` ahead at `h` above the feet: h 0.7 with the weapon drawn (0x1413f8), else
+    /// 0.57; l 1.3) hits a face, or a moby (with the weapon drawn: one that is not a crate, `0x273278`) → record 9's
+    /// pitch `((1.3 − (d − r)) / 1.3) · 1.25 · −70°` in [−70°, −30°] (d the 3-D distance to the hit, r the capsule
+    /// radius 0x13f584) and 0x141618 = 1: the gun points up at a wall or a ship rather than into it.
+    fn arm_at_wall(&mut self, env: &super::physics::Env) {
+        self.arm_at_wall = false;
+        if self.items.f13fb == 0 || self.held_item() == 0x1a { return; }
+        let deg = f(0x3c8e_fa35);
+        let (k, d) = (f(0x3d4c_cccd), f(0x3e99_999a));
+        if self.state == 0x81 {
+            let a = &mut self.idle.joints[joint::ARM];
+            (a.k, a.d) = (k, d);
+            a.target[1] = -f(0x3eb2_b8c2);
+        }
+        let h = if self.f13f8 != 0 { f(0x3f33_3333) } else { f(0x3f11_eb85) };
+        let len = f(0x3fa6_6666);
+        let r = self.rows.map(super::physics::to_f32x3);
+        let pos = super::physics::to_f32x3(self.pos);
+        let local = |fwd: f32| super::physics::from_f32x3([0, 1, 2].map(|k| (r[0][k] * fwd + r[2][k] * h) + pos[k]));
+        let rad = self.cap_radius.to_f32();
+        let Some(o) = env.line(local(rad - 0.02), local(len), 2) else { return };
+        if self.f13f8 != 0 {
+            let crate_ = o.moby.and_then(|id| env.mobys.and_then(|m| m.mobys.moby(id))).is_some_and(|m| (500..=540).contains(&m.o_class));
+            if crate_ { return; }
+        }
+        let dist = ((o.point[0] - pos[0]).powi(2) + (o.point[1] - pos[1]).powi(2) + (o.point[2] - pos[2]).powi(2)).sqrt();
+        let pitch = ((len - (dist - rad)) / len * 1.25 * -(70.0 * deg)).clamp(-(70.0 * deg), -(30.0 * deg));
+        let a = &mut self.idle.joints[joint::ARM];
+        (a.k, a.d) = (k, d);
+        a.target[1] = pitch;
+        self.arm_at_wall = true;
+    }
+
+    /// `0x22c5c0`, `0x22b700`, `0x22b928`, `HeroScanTargets`, `0x22bdd0`, `0x227590`, `0x2278c0`, `0x2352e0` and the joint
+    /// springs `0x2273d0`, in the hero update's order (`counter` = 0x15f5cc; Ratchet's sequence B after the transitions
+    /// from `anim`).
     pub(super) fn idle_updates(&mut self, env: &super::physics::Env, anim: &dyn super::AnimCtl, counter: i32, rng: &mut Rng) {
         let seq_b = anim.view().seq_b;
         self.feet_update(anim, rng);
+        self.arm_at_wall(env);
         self.head_look(seq_b, rng);
         self.scan_targets(env, seq_b, counter);
         self.idle_secondaries(seq_b, rng);
@@ -1255,6 +1294,42 @@ mod tests {
     use crate::moby_runtime::Moby;
     use crate::pad::{PadInput, PadState};
     use rc_formats::collision::Collision;
+
+    /// `0x22b700`: a weapon arm out facing a wall 1 unit ahead pitches record 9 up (−70°..−30°) and sets 0x141618; with the
+    /// wall 3 units away, nothing.
+    #[test]
+    fn the_gun_arm_raises_at_a_wall() {
+        use super::super::testkit::{cell, mesh};
+        let run = |wall_x: f32| {
+            let mut cells = Vec::new();
+            for cx in 100..104 {
+                for cy in 100..104 {
+                    let (x, y) = (cx as f32 * 4.0, cy as f32 * 4.0);
+                    cells.push(cell([cx, cy, 24], &[[x, y, 100.0], [x, y + 4.0, 100.0], [x + 4.0, y + 4.0, 100.0], [x + 4.0, y, 100.0]], &[([0, 1, 2, 3], 0x21)]));
+                }
+            }
+            let c = (wall_x / 4.0).floor() as i16;
+            for cz in 24..26 {
+                cells.push(cell([c, 102, cz], &[[wall_x, 406.0, 99.0], [wall_x, 414.0, 99.0], [wall_x, 414.0, 104.0], [wall_x, 406.0, 104.0]], &[([0, 1, 2, 3], 0x21)]));
+            }
+            let coll = mesh(cells);
+            let pad = PadState::default();
+            let (cam_rows, cam_yaw) = cam_x();
+            let env = Env { coll: &coll, pad: &pad, cam_yaw, cam_rows, mirror: false, death_z: Pf::ZERO, mobys: None, hero_moby: None, water: None, world: None };
+            let mut h = Hero::spawn([410.0, 410.0, 100.0], 0.0);
+            h.items.f13fb = 1;
+            h.f13f8 = 1;
+            h.items.slot.state = 2;
+            h.items.slot.id = 15;
+            h.arm_at_wall(&env);
+            (h.arm_at_wall, h.idle.joints[joint::ARM].target[1])
+        };
+        let (on, pitch) = run(411.0);
+        let deg = std::f32::consts::PI / 180.0;
+        assert!(on, "no raise at the wall");
+        assert!((-70.0 * deg..=-30.0 * deg).contains(&pitch), "pitch {}", pitch / deg);
+        assert_eq!(run(413.0), (false, 0.0));
+    }
 
     /// Draws between two stream states.
     fn draws(from: Rng, to: Rng) -> usize {
