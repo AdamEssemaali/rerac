@@ -513,7 +513,7 @@ fn update(attach: Option<ResMut<MobyAttach>>, anim: Option<Res<MobyAnim>>, level
     // pickup (0x1413ff).
     let hand_off = play.as_ref().is_some_and(|p| p.game.hero.hand_hidden());
     // The Swingshot's hook (a moby of its own in the game: advanced every tick, placed by the item's update).
-    let hook = play.as_ref().and_then(|p| p.game.hero.swing.item.hook.filter(|_| p.game.hero.swing.item.alive));
+    let hook = play.as_ref().and_then(|p| p.game.hero.swing.item.hook.clone().filter(|_| p.game.hero.swing.item.alive));
     // The back mobys' animation state and pose snapshot as the hero update left them (item slot 3: pack
     // 0x1404d0, Clank 0x1404d4). The pack shown is the one of the slot's item (`Back::pack_o_class`: the Heli-,
     // Thruster- or Hydro-Pack), none while the slot is empty between a put-away and the next creation; Clank
@@ -619,8 +619,10 @@ fn update(attach: Option<ResMut<MobyAttach>>, anim: Option<Res<MobyAnim>>, level
         }
         for item in a.items.iter_mut().filter(|i| i.attach.slot == Slot::Hook) {
             item.visible = hook.is_some();
-            if let Some(k) = hook {
-                moby_anim::advance(&mut item.state, &item.anim);
+            if let Some(k) = hook.as_ref() {
+                // The claws' animation as the hook's update (`0x2dccd8`, rc_game::hero::swingshot) left it.
+                item.state = k.anim;
+                item.snapshot = k.snapshot.clone();
                 item.rows = k.rows.map(|r| r.map(f32::to_bits));
                 item.position = k.pos;
             }

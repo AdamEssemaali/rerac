@@ -386,13 +386,63 @@ pub(super) fn fire(h: &mut Hero, c: &mut Ctx) {
 
 /// The hook moby (class 0xd1, created by the hand item `0x2dcbf0`; the port keeps it with the item, as the
 /// hand item itself).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Hook {
     /// +0x10 position; +0xc0.. rows (copied from the hand item while in hand).
     pub pos: V3,
     pub rows: [[f32; 4]; 3],
     /// Its pvar +0x04: the flight speed (u/tick).
     pub speed: f32,
+    /// Its state byte +0x20 and animation (the claws: [`hook_update`]), with the blend's pose snapshot.
+    pub state: u8,
+    pub anim: rc_formats::moby_anim::AnimState,
+    pub snapshot: Option<rc_formats::moby_anim::MobyFrame>,
+}
+
+impl Default for Hook {
+    fn default() -> Self {
+        let anim = rc_formats::moby_anim::AnimState { seq_a: 0, frame_a: 0, seq_b: 0, frame_b: 0, t: 0.0, speed: 1.0, rate: 1.0, flags: 0, trigger_count: 0, skip_advance: false };
+        Hook { pos: [0.0; 3], rows: [[0.0; 4]; 3], speed: 0.0, state: 0, anim, snapshot: None }
+    }
+}
+
+/// The hook's update `0x2dccd8` (after its `MobyAnimAdvance`): its claws follow the hand item's state (+0x20). 0: the
+/// fold-out (sequence 0) → at its wrap sequence 1 (open, idle), 1; 1: the item fired (2) → sequence 3, 3, or put away
+/// (8) → sequence 2, 2; 2: at the wrap the hook is gone (deleted; the item makes a new one); 3: at the wrap sequence 4, 4;
+/// 4: the item in 3..5 → sequence 5, 5; 5: at the wrap its speed +0x58 = 0 (held on the last frame), the item in 6..7 →
+/// speed 1, sequence 7, 7; 7: at the wrap sequence 1, 1. Every change blends over `ticks(10)`.
+fn hook_update(hook: &mut Hook, item_state: u8, class: &rc_formats::moby_anim::MobyAnimClass) -> bool {
+    use rc_formats::moby_anim::{advance, set_sequence};
+    advance(&mut hook.anim, class);
+    let wrapped = hook.anim.flags & 2 != 0;
+    let blend = super::physics::ticks(10);
+    let to = |hook: &mut Hook, seq: u8, state: u8| {
+        if hook.anim.seq_b != seq { set_sequence(&mut hook.anim, class, seq, 0, blend, &mut hook.snapshot); }
+        hook.state = state;
+    };
+    match hook.state {
+        0 => {
+            if wrapped { to(hook, 1, 1); hook.anim.speed = 1.0; }
+        }
+        1 => match item_state {
+            2 => to(hook, 3, 3),
+            8 => { to(hook, 2, 2); hook.anim.speed = 1.0; }
+            _ => {}
+        },
+        2 => return !wrapped,
+        3 => if wrapped { to(hook, 4, 4); },
+        4 => if (3..=5).contains(&item_state) { to(hook, 5, 5); },
+        5 => {
+            if wrapped { hook.anim.speed = 0.0; }
+            if (6..=7).contains(&item_state) {
+                hook.anim.speed = 1.0;
+                to(hook, 7, 7);
+            }
+        }
+        6 => {}
+        _ => if wrapped || hook.state != 7 { to(hook, 1, 1); },
+    }
+    true
 }
 
 /// The rope the hand item draws this tick (`0x2dba30`, registered by `0x21afe0`): from the item's joint 0 to
@@ -906,10 +956,20 @@ pub(super) fn item_update(h: &mut Hero, c: &mut Ctx, data: &ItemData) {
     h.swing.item.sounds.clear();
     if h.state == 1 { h.set_state(c, 0x1e, true); }
     let joint = item_joint(h, data);
-    // `0x2dcbf0`: the hook, created once, at the item's joint 0 with its rows, speed 24·dt.
+    // The hook's own update (`0x2dccd8`, a moby of the run list: before the hero update, on the item's state of the
+    // last tick): its claws' animation; gone at the end of its put-away.
+    let item_state = h.swing.item.state;
+    if let (Some(k), Some(cls)) = (h.swing.item.hook.as_mut(), data.class(HOOK_CLASS)) {
+        if !hook_update(k, item_state, &cls.anim) { h.swing.item.hook = None; }
+    }
+    // `0x2dcbf0`: the hook, created once, at the item's joint 0 with its rows, speed 24·dt; `CreateMoby` starts its
+    // sequence 0 (the claws folding out).
     if h.swing.item.hook.is_none() {
         let rows = h.items.slot.item.as_ref().map(|it| it.rows.map(|r| r.map(f32::from_bits))).unwrap_or_default();
-        h.swing.item.hook = Some(Hook { pos: joint, rows, speed: DTF * 24.0 });
+        let mut k = Hook { pos: joint, rows, speed: DTF * 24.0, ..Default::default() };
+        if let Some(cls) = data.class(HOOK_CLASS) { rc_formats::moby_anim::set_sequence(&mut k.anim, &cls.anim, 0, 0, 0, &mut k.snapshot); }
+        k.anim.speed = 1.0;
+        h.swing.item.hook = Some(k);
     }
     // The look stance's markers (0x2dbdc0 after the hook, in 1 / 0x1e from its second tick): the red one at the screen
     // centre (`FUN_0020fb60(1.0, 0, 90°, item, 0xff0000ff, none, 0x24, −1, 4)`), then a green half-size one on the
@@ -931,7 +991,7 @@ pub(super) fn item_update(h: &mut Hero, c: &mut Ctx, data: &ItemData) {
     let on_t = target_pos(c.env, h.swing.on, h.swing.on_pos);
     let rope = |h: &mut Hero| {
         let it = &mut h.swing.item;
-        let hook = it.hook.map_or(joint, |k| k.pos);
+        let hook = it.hook.as_ref().map_or(joint, |k| k.pos);
         it.rope = Some(Rope { from: joint, to: hook, phase: it.phase, wavelength: it.wavelength, amplitude: it.amplitude });
     };
     let st = h.swing.item.state;
@@ -968,7 +1028,7 @@ pub(super) fn item_update(h: &mut Hero, c: &mut Ctx, data: &ItemData) {
         2 => {
             rope(h);
             if item_wrapped(h) { item_anim(h, data, 4); }
-            let hook = h.swing.item.hook.unwrap_or_default();
+            let hook = h.swing.item.hook.clone().unwrap_or_default();
             let d = sub(pull_t, hook.pos);
             let mut spd = hook.speed;
             if h.group == 0xf {
@@ -1015,7 +1075,7 @@ pub(super) fn item_update(h: &mut Hero, c: &mut Ctx, data: &ItemData) {
                 it.amplitude *= 1.0 - 0.1;
                 if 0.168 <= it.amplitude { return; }
                 h.swing.f904 = 0;
-                let near = h.swing.item.hook.is_none_or(|k| dist(k.pos, f3(h.pos)) <= 3.5);
+                let near = h.swing.item.hook.as_ref().is_none_or(|k| dist(k.pos, f3(h.pos)) <= 3.5);
                 if near {
                     h.set_state(c, 0, true);
                     6
@@ -1051,7 +1111,7 @@ pub(super) fn item_update(h: &mut Hero, c: &mut Ctx, data: &ItemData) {
         }
         7 | 0xe => {
             if st == 0xe && item_wrapped(h) { item_anim(h, data, 4); }
-            let hook = h.swing.item.hook.unwrap_or_default();
+            let hook = h.swing.item.hook.clone().unwrap_or_default();
             if hook.speed < dist(hook.pos, joint) {
                 if let Some(k) = h.swing.item.hook.as_mut() { k.pos = add(k.pos, set_len(sub(joint, k.pos), k.speed)); }
                 rope(h);
@@ -1070,7 +1130,7 @@ pub(super) fn item_update(h: &mut Hero, c: &mut Ctx, data: &ItemData) {
         9 => {
             rope(h);
             if item_wrapped(h) { item_anim(h, data, 4); }
-            let hook = h.swing.item.hook.unwrap_or_default();
+            let hook = h.swing.item.hook.clone().unwrap_or_default();
             let d = sub(on_t, hook.pos);
             if len(d) <= hook.speed {
                 if let Some(k) = h.swing.item.hook.as_mut() { k.pos = on_t; }
