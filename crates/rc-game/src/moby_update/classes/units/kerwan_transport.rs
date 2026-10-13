@@ -4,7 +4,9 @@
 //! speed springing toward the path's end (4.5·dt² both ways, at most 18·dt), the pitch to the move (±15°), the yaw to
 //! the point and a roll of the yaw's turn rate × the speed × −50, each turned with an acceleration limit; the class
 //! sound 0 of class 816 loops while it flies. After the states both bob (0.2, 120°/s) and wobble (0.0785, 70°/s /
-//! 100°/s; the wobble writes the pitch and roll the follower turns: the game's order). Read from the level03 decomp and
+//! 100°/s; the wobble writes the pitch and roll the follower turns: the game's order), then publish the tick's move
+//! for whoever stands on them (`CarryRiders(+0x20, position − old, old Euler, Euler)`, `0x24ee28`: the platform block
+//! the hero's carry reads; every placed 816 / 1012 has mode 0x20 and its block at +0x20). Read from the level03 decomp and
 //! disassembly (the follower's arguments, the boarding test, the prompt). Native `f32`.
 //!
 //! **The called platform 816** (pvars 0xf8): up to five boarding cuboids (+0x80[k]); Ratchet in one (or a class's
@@ -237,11 +239,22 @@ pub fn follow(w: &mut World, id: MobyId, path: i32) -> bool {
     done
 }
 
-/// The bob and the wobble after the states (`0x2d3c40` / `0x2dd0f0`).
-fn tail(w: &mut World, id: MobyId, prev: usize, phase: usize, wa: usize, wb: usize) {
+/// The bob and the wobble after the states (`0x2d3c40` / `0x2dd0f0`), then `CarryRiders(+0x20, position − old, old
+/// Euler, Euler)` (`0x24ee28`) with the pose the update started from: Ratchet standing on it rides its move.
+fn tail(w: &mut World, id: MobyId, prev: usize, phase: usize, wa: usize, wb: usize, old: ([f32; 4], [f32; 4])) {
     bob(w, id, k::BOB_AMP, k::BOB_RATE * k::DEG * DT, phase, prev);
     wobble(w, id, k::WOBBLE_AMP, k::WOBBLE_A * k::DEG * DT, k::WOBBLE_B * k::DEG * DT, wa, wb);
+    let m = w.mm(id);
+    let disp = std::array::from_fn(|i| m.position[i] - old.0[i]);
+    let rot = m.rotation;
+    crate::moby_update::triggers::carry_riders(&mut m.pvars, CARRY_BLOCK, disp, old.1, rot);
 }
+
+/// The platform block both classes carry their riders with (pvar +0x08 = 0x20 on every placed 816 / 1012).
+const CARRY_BLOCK: usize = 0x20;
+
+/// The position and Euler an update starts from (moby +0x10 / +0x40, kept before the states).
+fn pose(w: &World, id: MobyId) -> ([f32; 4], [f32; 4]) { (w.m(id).position, w.m(id).rotation) }
 
 /// 816's path of slot `slot` in the table at `base`.
 fn slot_path(w: &World, id: MobyId, base: usize, slot: usize) -> i32 { pi(w, id, base + 4 * slot.min(4)) }
@@ -249,6 +262,7 @@ fn slot_path(w: &World, id: MobyId, base: usize, slot: usize) -> i32 { pi(w, id,
 /// Level03 `0x2d3198`, the called platform 816 (module table).
 pub fn update_816(w: &mut World, id: MobyId) {
     if w.m(id).pvars.len() < p816::SIZE { w.mm(id).pvars.resize(p816::SIZE, 0); }
+    let old = pose(w, id);
     let moving = (2..=6).contains(&w.m(id).state);
     interact::set_talked(w, id, moving as u32);
     let slot = w.m(id).cmd as usize;
@@ -270,7 +284,7 @@ pub fn update_816(w: &mut World, id: MobyId) {
             }
         }
         1 => {
-            if pi(w, id, p816::ENABLED) == 0 { return tail_816(w, id); }
+            if pi(w, id, p816::ENABLED) == 0 { return tail_816(w, id, old); }
             let at = hero(w);
             for k in 0..5 {
                 let cuboid = slot_path(w, id, p816::CUBOIDS, k);
@@ -300,7 +314,7 @@ pub fn update_816(w: &mut World, id: MobyId) {
         }
         3 => {
             level_pitch(w, id);
-            if w.hero.ground_moby != Some(id) || w.hero.air_ticks != 0 { return tail_816(w, id); }
+            if w.hero.ground_moby != Some(id) || w.hero.air_ticks != 0 { return tail_816(w, id, old); }
             w.svc.interact.try_prompt(owner::TRANSPORT, PROMPT_816);
             if w.svc.interact.triangle() && w.svc.interact.prompt.owner == owner::TRANSPORT {
                 walk_on(w, id);
@@ -335,10 +349,10 @@ pub fn update_816(w: &mut World, id: MobyId) {
         }
         _ => {}
     }
-    tail_816(w, id);
+    tail_816(w, id, old);
 }
 
-fn tail_816(w: &mut World, id: MobyId) { tail(w, id, p816::BOB_PREV, p816::BOB_PHASE, p816::WOBBLE_A, p816::WOBBLE_B); }
+fn tail_816(w: &mut World, id: MobyId, old: ([f32; 4], [f32; 4])) { tail(w, id, p816::BOB_PREV, p816::BOB_PHASE, p816::WOBBLE_A, p816::WOBBLE_B, old); }
 
 /// `0x2dcbc8(m, kind)`: the destination's message in the prompt (owner 8), and the prompt element raised now.
 pub fn prompt_1012(w: &mut World, kind: i32) {
@@ -350,6 +364,7 @@ pub fn prompt_1012(w: &mut World, kind: i32) {
 /// Level03 `0x2dccc0`, the shuttle 1012 (module table).
 pub fn update_1012(w: &mut World, id: MobyId) {
     if w.m(id).pvars.len() < p1012::SIZE { w.mm(id).pvars.resize(p1012::SIZE, 0); }
+    let old = pose(w, id);
     let (a, b) = (pi(w, id, p1012::PATHS), pi(w, id, p1012::PATHS + 4));
     if a == -1 || b == -1 { return; }
     let active = w.m(id).state != 0 && pi(w, id, p1012::ACTIVE) == 1;
@@ -428,7 +443,36 @@ pub fn update_1012(w: &mut World, id: MobyId) {
         }
         _ => {}
     }
-    tail(w, id, p1012::BOB_PREV, p1012::BOB_PHASE, p1012::WOBBLE_A, p1012::WOBBLE_B);
+    tail(w, id, p1012::BOB_PREV, p1012::BOB_PHASE, p1012::WOBBLE_A, p1012::WOBBLE_B, old);
     let pos = c::pos(w, id);
     if !w.hero_on_moby(id) && 2.0 < dist_xy(pos, hero(w)) && pi(w, id, p1012::TIMER) == 0 { c::set_pi32(w, id, p1012::READY, 1); }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::moby_runtime::{Moby, MobyTable};
+
+    /// The update ends in `CarryRiders` (0x24ee28): a parked platform's bob is published in its block (+0x20), so the
+    /// hero's platform carry moves a rider with it.
+    #[test]
+    fn a_platform_publishes_its_move_for_its_riders() {
+        let mut pv = vec![0u8; p816::SIZE];
+        pv[8..12].copy_from_slice(&(CARRY_BLOCK as i32).to_le_bytes());
+        let m = Moby { o_class: 816, scale: 1.0, state: 1, mode: 0x20, position: [100.0, 100.0, 50.0, 1.0], pvars: pv, hit_slot: 0xff, ..Moby::default() };
+        let mut t = MobyTable::new(vec![m], 8);
+        let hero = crate::hero::Hero::new();
+        let mut rng = crate::rng::Rng::new();
+        let classes = crate::moby_update::ClassTable::default();
+        let mut svc = crate::moby_update::Services::new();
+        let mut w = World::new(&mut t, &hero, &mut rng, &classes, &mut svc, 0);
+        for _ in 0..10 {
+            let before = w.m(0).position;
+            update_816(&mut w, 0);
+            let after = w.m(0).position;
+            let d = crate::moby_update::triggers::platform_delta(w.m(0)).expect("a carrier");
+            assert_eq!(&d.displacement[..3], &[after[0] - before[0], after[1] - before[1], after[2] - before[2]]);
+        }
+        assert!(crate::moby_update::triggers::platform_delta(w.m(0)).is_some_and(|d| d.displacement[2] != 0.0), "the bob moves it");
+    }
 }
