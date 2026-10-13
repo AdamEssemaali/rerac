@@ -33,8 +33,7 @@
 //! with other constants (size k, fireball divisor, colour tables, fireball class).
 //!
 //! Native `f32`. **Not ported** (counted in `Services::fx.unported`): the aim-preview `0x2c2be0`, the pass-through
-//! classes of the hit test (update `0x160770`), the gold glove (0x13e52a: k = 2, the colour shifts `0x270fa8` /
-//! `0x270f48` [`blast`] takes, the gold smoke of the fireballs, class sound 1; not mirrored, G-WPN gold).
+//! classes of the hit test (update `0x160770`). The gold glove (0x13e52a) is the blast's k = 2 (the hit sphere 1, the growing one to 5.5), its colour shift (the rings, flashes, fireballs and their smoke), class sound 1.
 
 use crate::moby_runtime::MobyId;
 use crate::moby_update::services::{self as sv, pvar as p, HitTemplate, World};
@@ -389,7 +388,9 @@ pub(crate) const RING_C2: [u32; 6] = crate::moby_update::creature::fx::SPARK_B;
 /// The explosion (+0xbc ≠ 0; `drift` = the reflected direction ·2·dt (or the velocity at the fuse's end),
 /// `normal` = the unit normal of the face it hit).
 fn explode(w: &mut World, id: MobyId, drift: [f32; 4], normal: [f32; 4]) {
-    let k = 1.0f32;
+    // The gold glove (0x13e52a, the gold table's entry 10): the blast twice the size, gold colours, class sound 1.
+    let gold = gold_glove(w);
+    let k = gold as f32 + 1.0;
     let drift = drift.map(|x| x * k);
     let pos = w.m(id).position;
     let cam = w.camera.map(|x| x.to_f32());
@@ -404,12 +405,12 @@ fn explode(w: &mut World, id: MobyId, drift: [f32; 4], normal: [f32; 4]) {
         w.mm(id).state = EXPLODING;
     }
     // The fireballs, rings and flashes (the explosion code the Suck Cannon's burst and Gemlik's tanks share).
-    blast(w, &GLOVE_BLAST, id, pos, drift, normal, k, 1, dry, 0);
+    blast(w, &GLOVE_BLAST, id, pos, drift, normal, k, 1, dry, gold);
     if !dry { super::bomb_water::deep_burst(w, id, k); }
     p::set_ff(&mut w.mm(id).pvars, pv::VEL, 0.0);
     w.mm(id).cmd = 0;
     if dry {
-        w.play_sound(0, 0, id);
+        w.play_sound(if gold == 0 { 0 } else { 1 }, 0, id);
     } else {
         w.play_sound_as(0x16, 0, id, 0);
     }
@@ -613,22 +614,27 @@ pub fn fireball_update(w: &mut World, id: MobyId) {
 
 /// The fireball's smoke (0x2c4d88 while +0xbc bit 0 is set, i.e. the high fireballs): every tick one type-4 puff
 /// (`crate::particles::type04`) at the fireball, moving `dt` in a random direction (3 × `randf(−1, 1)`, normalised),
-/// colour [`SMOKE`]`[randi(4)]` fading to 0x4fff over `ticks(45)`, size 50 growing by 120 (×1000), additive. The gold
-/// glove's colour shift (+0xbc > 1, `0x270fa8`) is not ported (counted).
+/// colour [`SMOKE`]`[randi(4)]` fading to 0x4fff over `ticks(45)`, size 50 growing by 120 (×1000), additive; the gold
+/// glove's (+0xbc > 1) both shifted by `0x270fa8(c, +0xbc >> 1)`.
 fn smoke(w: &mut World, id: MobyId) {
     let x = w.rng.randf(-1.0, 1.0);
     let y = w.rng.randf(-1.0, 1.0);
     let z = w.rng.randf(-1.0, 1.0);
     let v = setlen([x, y, z, 0.0], dt());
     let k = w.rng.randi(4) as usize;
-    if w.m(id).cmd & 0xfe != 0 { w.svc.unported("fireball smoke: gold colours 0x270fa8"); }
-    let a = crate::particles::type04::Spawn { pos: w.m(id).position, vel: v, c1: SMOKE[k], c2: 0x4fff, life: w.ticks(45), base: 0x32, growth: 0x78, additive: true };
+    // The gold glove's fireball (+0xbc > 1): both colours through `0x270fa8(c, +0xbc >> 1)`.
+    let shift = w.m(id).cmd >> 1;
+    let shifted = |c: u32| crate::moby_update::creature::fx::colour_shift(c, shift);
+    let a = crate::particles::type04::Spawn { pos: w.m(id).position, vel: v, c1: shifted(SMOKE[k]), c2: shifted(0x4fff), life: w.ticks(45), base: 0x32, growth: 0x78, additive: true };
     crate::moby_update::creature::fx::part04(w, &a);
 }
 
+/// 0x13e52a: the gold Bomb Glove owned (the gold table's entry 10), 0 / 1.
+fn gold_glove(w: &World) -> u8 { w.hero.weapons.gold.get(10).map_or(0, |&g| (g != 0) as u8) }
+
 /// State 2: the growing sphere.
 fn exploding(w: &mut World, id: MobyId) {
-    let k = 1.0f32;
+    let k = gold_glove(w) as f32 + 1.0;
     let pos = w.m(id).position;
     let c = w.m(id).cmd;
     {
