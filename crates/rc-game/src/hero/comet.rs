@@ -35,8 +35,9 @@
 //!
 //! Native `f32` for the flight (the moby side); the state code keeps the hero block's PS2 float type at its
 //! boundary. The after-images of 0x140b00 (`0x277400` / `0x277428` at the throw,
-//! `0x277508` each flight tick, `0x277740` at the catch) are `crate::afterimage`'s. **Not ported**: the look stance's aiming beam `0x20fb60`, the wall-hit sparks
-//! `0x2bdd20` / hit sparkles `0x2bdb18` (particle types 0x2d / 0x35 records; their draws are not made), the hit-record checks of the hit sound (`FUN_002711f8` records of the
+//! `0x277508` each flight tick, `0x277740` at the catch) are `crate::afterimage`'s. The bounce going out makes the hit burst `0x2bdd20` (`super::fx::wrench_burst`) at the
+//! line's hit point. **Not ported**: the look stance's aiming beam `0x20fb60`, the burst's sparkles `0x2bdb18` (type 53,
+//! two per call; made when the wrench's s16 pvar +0x78 is 0x2b, whose writer is not found yet), the hit-record checks of the hit sound (`FUN_002711f8` records of the
 //! same throw, target type 0x14), and the world line's moby part (the port's line is the world mesh: a non-crate
 //! moby does not bounce the wrench; it is still hit by the sphere).
 
@@ -354,7 +355,8 @@ pub fn thrown_update(hero: &mut Hero, table: &mut MobyTable, anim: &dyn AnimCtl,
         hero.fx.trails.wrench.kill();
     }
     // The bounce: the world line old → new (flags 2) on a non-water face, or the wall-close flag once.
-    let hit_world = env.coll.and_then(|c| line_world(c, from_f32x3(old), from_f32x3(pos), 2)).is_some_and(|o| o.surface_id() != 0);
+    let line = env.coll.and_then(|c| line_world(c, from_f32x3(old), from_f32x3(pos), 2));
+    let hit_world = line.as_ref().is_some_and(|o| o.surface_id() != 0);
     let it = hero.items.slot.item.as_mut().unwrap();
     let forced = std::mem::take(&mut it.flight.wall_close);
     if hit_world || forced {
@@ -364,6 +366,11 @@ pub fn thrown_update(hero: &mut Hero, table: &mut MobyTable, anim: &dyn AnimCtl,
             hero.fx.item_sounds.push(CLANK_SOUND);
         }
         if it.mstate == OUT {
+            // `0x2bdd20(item)`: the hit burst at 0x1742e0, the line's hit point (the wall-close bounce without a hit
+            // this tick: the wrench's position [L]; the game's 0x1742e0 is then the last line test's anywhere).
+            let point = line.as_ref().map_or([pos[0], pos[1], pos[2]], |o| o.point);
+            if let Some((cam, _)) = env.camera { super::fx::wrench_burst(hero, rng, point, cam); }
+            let it = hero.items.slot.item.as_mut().unwrap();
             it.flight.speed *= 0.5;
             it.mstate = BACK;
         }
@@ -604,6 +611,28 @@ mod tests {
         assert!(h.comet.catch_exit, "no catch exit");
         assert_eq!(h.fx.item_voices, vec![SoundCmd::Release { slot: 7 }, SoundCmd::Voice { index: CATCH_VOICE, flags: 0 }]);
         assert_eq!(h.items.slot.detached, 0);
+    }
+
+    /// The bounce going out (here the wall-close flag) makes the hit burst `0x2bdd20`: 20 streaks and 10 sparks, then
+    /// half speed and back.
+    #[test]
+    fn the_bounce_going_out_sparks() {
+        use super::super::fx::PartSpawn;
+        let mut h = Hero::spawn([410.0, 410.0, 100.0], 0.0);
+        let mut it = wrench();
+        it.mstate = OUT;
+        it.flight = Flight { dir: [1.0, 0.0, 0.0], speed: 23.0 / 60.0, accel: 0.0, wall_close: true, euler: [0.0; 3] };
+        h.items.slot = items::HandSlot { item: Some(it), fire_mask: button::SQUARE, state: 2, id: 8, detached: 1, hand_point: [410.0, 410.0, 101.0], ..Default::default() };
+        let d = data();
+        let pad = crate::pad::PadState::default();
+        let mut table = crate::moby_runtime::MobyTable::new(vec![crate::moby_runtime::Moby::zeroed()], 4);
+        let anim = KeyAnim { looped: Some((6, 0x15)), ..Default::default() };
+        let env = ItemEnv { data: &d, pad: &pad, frame: 0, hero_moby: 0, coll: None, camera: Some(([400.0, 410.0, 103.0], [1.0, 0.0, 0.0])), camera_up: None, targets: &[] };
+        thrown_update(&mut h, &mut table, &anim, &env, &mut NoHits, &mut Rng::new());
+        let streaks = h.fx.parts.iter().filter(|p| matches!(p, PartSpawn::Streak19 { .. })).count();
+        let sparks = h.fx.parts.iter().filter(|p| matches!(p, PartSpawn::Spark21 { .. })).count();
+        assert_eq!((streaks, sparks), (20, 10));
+        assert_eq!(h.items.slot.item.as_ref().unwrap().mstate, BACK);
     }
 
     /// Right-handed rotation matrices (columns = images of the model axes), as `0x221980` builds them
