@@ -10,7 +10,7 @@
 //! so a crate on the path gets its hit): a hit explodes it — except Ratchet or the glove in its first 10 ticks;
 //! water (surface 0) while falling: it sinks at 1.5 u/s until its 300-tick fuse (+0x54) runs out; the fuse ends in
 //! the air too. **The explosion** (moby +0xbc = 1): the sphere 0.5 lists the mobys (`coll_sphere_mobys`, flags
-//! 0x10) and hits them (`0x26f8f8`: damage 2, flags 0x830000) → state **2**; the fireballs (10 low ones, 4 + 1 high,
+//! 0x10) and hits them (`0x26f8f8`: damage 2, push 1 away from the bomb and 1 up, flags 0x830000) → state **2**; the fireballs (10 low ones, 4 + 1 high,
 //! the last toward the camera), the type-11 smoke rings (1..4 by the camera distance), the flashes (class 1192:
 //! two more when the camera is farther than 9), the class sound 0, the camera shake along up `0.4 − 0.0175·d`
 //! (0.05 beyond 20) for 25 ticks. **2 exploding**: hidden, a sphere growing from 0.5 to 2.5 over 15 ticks hits
@@ -398,9 +398,9 @@ fn explode(w: &mut World, id: MobyId, drift: [f32; 4], normal: [f32; 4]) {
     let water = p::i16(&w.m(id).pvars, pv::WATER);
     let dry = (water as i32) < w.ticks(20);
     if dry {
-        // The sphere lists the mobys; 0x26f8f8 hits them (damage 2, flags 0x830000).
-        let tmpl = HitTemplate { dir: [Pf::ZERO, Pf::ZERO, Pf::ONE, Pf::b(0x45af_df66)], attacker: Some(id), flags: 0x83_0000, b18: 2, b19: 1, h1a: BOMB_CLASS as u16, damage: Pf::f(2.0), w20: 1 };
-        w.sphere_mobys(Pf::f(k * 0.5), pv4(pos), 0x10, Some(id), Some(&tmpl));
+        // The sphere lists the mobys; `0x26f8f8(2, 1, 1, bomb, pos, list, n, 0, 0x830000, 2, 1)` hits them, each pushed
+        // 1 away from the bomb and 1 up (a creature killed by it takes its death flight away from the blast).
+        crate::moby_update::creature::attack::area_hit(w, k * 0.5, pos, id, 2.0, 1.0, 1.0, None, 0x83_0000, 2, 1);
         w.mm(id).state = EXPLODING;
     }
     // The fireballs, rings and flashes (the explosion code the Suck Cannon's burst and Gemlik's tanks share).
@@ -636,8 +636,7 @@ fn exploding(w: &mut World, id: MobyId) {
         m.mode |= 0x41;
     }
     let r = 0.5 + ((k * 3.0 - 0.5) - 0.5) * (c as f32 / 15.0);
-    let tmpl = HitTemplate { dir: [Pf::ZERO, Pf::ZERO, Pf::ONE, Pf::b(0x45af_df66)], attacker: Some(id), flags: 0x83_0000, b18: 2, b19: 1, h1a: BOMB_CLASS as u16, damage: Pf::f(2.0), w20: 1 };
-    w.sphere_mobys(Pf::f(r), pv4(pos), 0x10, Some(id), Some(&tmpl));
+    crate::moby_update::creature::attack::area_hit(w, r, pos, id, 2.0, 1.0, 1.0, None, 0x83_0000, 2, 1);
     let m = w.mm(id);
     m.cmd = m.cmd.wrapping_add(1);
     if m.cmd as i32 > 15 { w.delete_moby(id); }

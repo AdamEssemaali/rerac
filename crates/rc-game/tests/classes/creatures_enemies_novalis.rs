@@ -395,7 +395,12 @@ fn novalis_trooper_dies_to_the_bomb() {
     eprintln!("trooper 310 states {st:?}; spawned {:?}", out.spawned);
     assert!(out.spawned.get(&121).copied().unwrap_or(0) > 0, "no bomb thrown");
     assert_eq!(*st.last().unwrap(), 0xfd, "not killed ({st:?})");
-    // A bomb kill on the ground ends the death flight in its first tick (the flight's sphere touches the ground).
+    // The blast (`0x26f8f8`: push 1 away from the bomb, 1 up) throws it: the death flight (0xe) carries it away
+    // before it explodes, as a wrench kill does.
+    let flight: Vec<[f32; 3]> = (0..out.rows.len()).filter_map(|i| out.at(i, t)).filter(|e| e.0 == 0xe).map(|e| e.2).collect();
+    let travel = flight.first().zip(flight.last()).map_or(0.0, |(a, b)| ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt());
+    eprintln!("death flight: {} ticks, {travel:.2} units across", flight.len());
+    assert!(flight.len() > 1 && travel > 0.5, "no death flight away from the blast ({} ticks, {travel:.2} units)", flight.len());
     let pieces: usize = [1736, 1737, 1738, 1770].iter().map(|c| out.spawned.get(c).copied().unwrap_or(0)).sum();
     assert!(pieces >= 4, "no body pieces ({pieces})");
     let again = run(&lv, at, 10, &input, 1000);
