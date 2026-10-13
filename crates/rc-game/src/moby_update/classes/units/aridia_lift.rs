@@ -16,7 +16,7 @@
 //! | 0x2dbd38 | old = −position (`0x210368(−1)`, the scale); the old rotation kept | [`update`] |
 //! | 0 | voice −1; +0xa8 = the cylinder's row 2 z + centre z; `cmd` 1; z = that + 0.5 (gp−0x5030); +0xa4 ? 2 : 1 | [`update`] |
 //! | 1 | Ratchet on it (ground moby 0x13f64c, air ticks 0x13f65e = 0) or the Trespasser owned (0x13d4da) → the turn | [`update`] ([`turn`]) |
-//! | 2 | the hum released; within 20 of Ratchet: the other stop (±row 2 z + centre z + 0.5), Ratchet's z within 1 of it → `cmd` flipped, +0xa8 it, speed 0, 3; else Ratchet on it → the turn | [`update`] |
+//! | 2 | the hum released; within 20 of Ratchet (xy: `vec_distance2` 0x1f9b80): the other stop (±row 2 z + centre z + 0.5), Ratchet's z within 1 of it → `cmd` flipped, +0xa8 it, speed 0, 3; else Ratchet on it → the turn | [`update`] |
 //! | 3 | Ratchet's body point (0x13f420) in the cylinder (0x2748f8), the lift within 1 of 2 above his feet and at or above the stop: brake (target its own z, 4·12·dt²); else to the stop (12·dt², gp−0x5020); max 6·dt (gp−0x5024); the linear spring 0x25df98 (= L01 0x270830) | [`update`] (`turn::spring`) |
 //! | | `CarryRiders(+0x60, (0, 0, v), rot, rot)`; v = 0 → the hum released, else started when not alive | [`update`] |
 //! | | at the stop: Ratchet off it → +0x70 zeroed, 2; speed ≠ 0 → `RegisterDrawCallback(0x2dc2c8)` | [`update`] |
@@ -116,7 +116,8 @@ pub fn update(w: &mut World, id: MobyId) {
         }
         2 => {
             release(w, id);
-            let near = c::dist3(w.m(id).position, crate::moby_update::classes::units::hero_pos(w)) < 20.0;
+            // `vec_distance2` 0x1f9b80: x and y only (Ratchet at the other stop is a shaft's height away).
+            let near = c::dist2(w.m(id).position, crate::moby_update::classes::units::hero_pos(w)) < 20.0;
             let s = other_stop(w, id);
             let hz = crate::moby_update::classes::units::hero_pos(w)[2];
             if (near && (hz - s).abs() < 1.0) || on_it(w, id) { turn(w, id, s); }
@@ -208,4 +209,27 @@ pub fn fx_quads(table: &MobyTable, svc: &Services, id: MobyId) -> Option<FxQuads
         z += RING_STEP;
     }
     Some(FxQuads { fx: FX, additive: true, subtract: false, quads })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::moby_runtime::{Moby, MobyTable};
+
+    /// State 2: Ratchet within 20 (xy, `vec_distance2`) at the other stop's height calls the lift there. Lowered after
+    /// the Trespasser, Aridia's top lift (#564) must come back up for him: he stands a shaft's height above it.
+    #[test]
+    fn a_lift_below_comes_up_for_ratchet_standing_above_it() {
+        let lift = Moby { o_class: 651, scale: 1.0, state: 2, cmd: 0, position: [100.0, 100.0, -29.5, 1.0], pvars: vec![0; SIZE], hit_slot: 0xff, ..Moby::default() };
+        let mut t = MobyTable::new(vec![lift], 8);
+        let mut hero = crate::hero::Hero::new();
+        hero.pos = [100.0f32, 103.0, 0.5, 1.0].map(crate::ps2v::Pf::f);
+        let mut rng = crate::rng::Rng::new();
+        let classes = crate::moby_update::ClassTable::default();
+        let mut svc = crate::moby_update::Services::new();
+        let mut w = World::new(&mut t, &hero, &mut rng, &classes, &mut svc, 0);
+        update(&mut w, 0);
+        assert_eq!((w.m(0).state, w.m(0).cmd), (3, 1), "the lift did not set off for the top");
+        assert_eq!(c::pf(&w, 0, STOP), 0.5);
+    }
 }
