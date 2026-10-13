@@ -36,8 +36,8 @@
 //! Native `f32` for the flight (the moby side); the state code keeps the hero block's PS2 float type at its
 //! boundary. The after-images of 0x140b00 (`0x277400` / `0x277428` at the throw,
 //! `0x277508` each flight tick, `0x277740` at the catch) are `crate::afterimage`'s. The bounce going out makes the hit burst `0x2bdd20` (`super::fx::wrench_burst`) at the
-//! line's hit point. The look stance's reticle (`0x20fb60`, R1 / R2 held) is `super::melee::wrench_update`'s. **Not ported**: the burst's sparkles `0x2bdb18` (type 53,
-//! two per call; made when the wrench's s16 pvar +0x78 is 0x2b, whose writer is not found yet), the hit-record checks of the hit sound (`FUN_002711f8` records of the
+//! line's hit point. The look stance's reticle (`0x20fb60`, R1 / R2 held) is `super::melee::wrench_update`'s. A moby hit makes five pairs of sparkles between the wrench and it (`0x2bdb18`, `super::fx::wrench_sparkles`).
+//! **Not ported**: the hit-record checks of the hit sound (`FUN_002711f8` records of the
 //! same throw, target type 0x14), and the world line's moby part (the port's line is the world mesh: a non-crate
 //! moby does not bounce the wrench; it is still hit by the sphere).
 
@@ -398,14 +398,22 @@ pub fn thrown_update(hero: &mut Hero, table: &mut MobyTable, anim: &dyn AnimCtl,
     };
     let r = Pf::b(0x3ecc_cccd);
     let mut hit = None;
+    let mut at = from_f32x3(it.position);
     for list in [1, 0] {
         let c = point(list).unwrap_or_else(|| from_f32x3(it.position));
         if let Some(m) = hits.sphere(table, r, c, 0, ignore, &tmpl) {
             hit = Some(m);
+            at = c;
             break;
         }
     }
     if hit.is_some() && hero.melee.hit == 0 {
+        // `0x2bdb18(lerp(0.5, sphere centre, hit moby), 5)`: the sparkles between the wrench and what it hit.
+        if let Some(m) = hit.and_then(|m| table.mobys.get(m)) {
+            let c = to_f32x3(at);
+            let mid = [(c[0] + m.position[0]) * 0.5, (c[1] + m.position[1]) * 0.5, (c[2] + m.position[2]) * 0.5];
+            super::fx::wrench_sparkles(hero, rng, mid, 5);
+        }
         if let Some(it) = hero.items.slot.item.as_mut() { it.hit_timer = ticks(30); }
         hero.melee.hit = 1;
         hero.items.hit_sounds += 1;
@@ -709,6 +717,34 @@ mod tests {
         assert!(voices.contains(&LOOK_THROW_VOICE), "voices {voices:?}");
         // No camera line target here: the camera's yaw and 7° above its pitch.
         assert!((it.flight.dir[2] - f32::from_bits(0x3dfa_35dd).sin()).abs() < 1e-4, "{:?}", it.flight.dir);
+    }
+
+    /// The thrown wrench's first moby hit makes five pairs of sparkles (`0x2bdb18`) between it and the moby.
+    #[test]
+    fn a_moby_hit_sparkles() {
+        use super::super::fx::PartSpawn;
+        struct OneHit;
+        impl HitSink for OneHit {
+            fn sphere(&mut self, _: &mut MobyTable, _: Pf, _: crate::hero::physics::V4, _: u32, _: Option<crate::moby_runtime::MobyId>, _: &HitTemplate) -> Option<crate::moby_runtime::MobyId> { Some(1) }
+            fn line(&mut self, _: &mut MobyTable, _: crate::hero::physics::V4, _: crate::hero::physics::V4, _: u32, _: Option<crate::moby_runtime::MobyId>, _: &HitTemplate) -> Option<Option<crate::moby_runtime::MobyId>> { None }
+        }
+        let mut h = Hero::spawn([410.0, 410.0, 100.0], 0.0);
+        let mut it = wrench();
+        it.mstate = OUT;
+        it.flight = Flight { dir: [1.0, 0.0, 0.0], speed: 23.0 / 60.0, accel: 0.0, wall_close: false, euler: [0.0; 3] };
+        h.items.slot = items::HandSlot { item: Some(it), fire_mask: button::SQUARE, state: 2, id: 8, detached: 1, hand_point: [410.0, 410.0, 101.0], ..Default::default() };
+        let d = data();
+        let pad = crate::pad::PadState::default();
+        let mut target = crate::moby_runtime::Moby::zeroed();
+        target.position = [413.0, 410.0, 101.0, 1.0];
+        let mut table = crate::moby_runtime::MobyTable::new(vec![crate::moby_runtime::Moby::zeroed(), target], 4);
+        let anim = KeyAnim { looped: Some((6, 0x15)), ..Default::default() };
+        let env = ItemEnv { data: &d, pad: &pad, frame: 0, hero_moby: 0, coll: None, camera: None, camera_up: None, targets: &[] };
+        thrown_update(&mut h, &mut table, &anim, &env, &mut OneHit, &mut Rng::new());
+        let sparkles: Vec<_> = h.fx.parts.iter().filter_map(|p| match p { PartSpawn::Sparkle { b8, pos, .. } => Some((*b8, *pos)), _ => None }).collect();
+        assert_eq!(sparkles.len(), 10, "five pairs");
+        assert!(sparkles.iter().all(|(_, p)| (410.5..413.5).contains(&p[0])), "{sparkles:?}");
+        assert_eq!(sparkles.iter().filter(|s| s.0 == 1).count(), 5);
     }
 
     /// The look stance with R1 / R2 held shows the wrench's reticle (0x2be1c0: the screen-centre marker, FX 0x25);

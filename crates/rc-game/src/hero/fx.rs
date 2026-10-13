@@ -389,8 +389,8 @@ pub fn burn_bounce_fire(h: &mut Hero, rng: &mut Rng) {
 /// sparks (type 21: size 20000, colours 0x4f007fff → 0x1fffffff, `rand_range(ticks(10), ticks(20))` ticks), their
 /// directions `randf_sym(0, π)` off the elevation from the point to the camera `cam` (0x167240), negated, for both
 /// angles; the streaks 0.2 a tick from `randf(1, 3)` of that out, the sparks 0.05 a tick from the point jittered by
-/// `randf_sym(0, 0.1)` per axis. (The Comet-Strike's sparkles `0x2bdb18` after it, for a thrown wrench only, are not
-/// ported.)
+/// `randf_sym(0, 0.1)` per axis. Its tail's sparkles (`0x2bdb18(point, 10)` when the wrench's s16 pvar +0x78 is 0x2b) never
+/// run: nothing in the level code writes that word, and a created moby's pvars start at 0.
 pub fn wrench_burst(h: &mut Hero, rng: &mut Rng, point: [f32; 3], cam: [f32; 3]) {
     use crate::hero::physics::ticks;
     use crate::moby_update::creature::add_rot;
@@ -416,6 +416,31 @@ pub fn wrench_burst(h: &mut Hero, rng: &mut Rng, point: [f32; 3], cam: [f32; 3])
         let life = rng.rand_range(ticks(10), ticks(0x14));
         let rot = rng.rand() as u8;
         h.fx.parts.push(PartSpawn::Spark21 { size: 20000.0, pos, vel: v, c1: 0x4f00_7fff, c2: 0x1fff_ffff, life, split: 1, rot });
+    }
+}
+
+/// `0x2bdb18(point, n)`: the wrench's hit sparkles, `n` pairs of type-53 sparkles (`PartType53Spawn` 0x287328, modes 0 / 1:
+/// no draw in the spawner). Each pair: size `s = randf(0.1, 2)`, spin side `randi(2)` (0 → −1), velocity
+/// `polar(randf(0.05, 0.1), rand_angle, randf(20°, 88°))`, then the point (the caller's, moved in place: the jitter adds
+/// up) `+= randf_sym(0, 0.15)` per axis; the first (0.1·s, s, z deceleration 0.003, `ticks(30)`, 0x7f207f7f, mode 0, the
+/// side), the second (0.07·s, 0.7·s, …, 0x7f7f7f7f, mode 1, the other side).
+pub fn wrench_sparkles(h: &mut Hero, rng: &mut Rng, mut point: [f32; 3], n: i32) {
+    let w = h.pos[3].to_f32();
+    for _ in 0..n.max(0) {
+        let s = rng.randf(0.1, 2.0);
+        let r = rng.randi(2);
+        let mut side = if r != 0 { r } else { -1 } as i8;
+        let a = rng.rand_angle();
+        let p = rng.randf(f32::from_bits(0x3eb2_b8c2), f32::from_bits(0x3fc4_9809));
+        let v = polar(rng.randf(0.05, 0.1), a, p);
+        for k in 0..3 { point[k] += rng.randf_sym(0.0, 0.15); }
+        let pos = [point[0], point[1], point[2], w];
+        let life = crate::hero::physics::ticks(30);
+        let vel = [v[0], v[1], v[2]];
+        let s14 = f32::from_bits(0x3b44_9ba6);
+        h.fx.parts.push(PartSpawn::Sparkle { s12: s * 0.1, s13: s, s14, pos, life, rgba: 0x7f20_7f7f, b8: 0, t0: side, vel });
+        side = -side;
+        h.fx.parts.push(PartSpawn::Sparkle { s12: s * f32::from_bits(0x3d8f_5c29), s13: s * f32::from_bits(0x3f33_3333), s14, pos, life, rgba: 0x7f7f_7f7f, b8: 1, t0: side, vel });
     }
 }
 
