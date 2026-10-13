@@ -22,7 +22,7 @@
 //! | | the ride: on the pad (0x13f64c = self), grounded, the timer out (a second count-down), 0.29 above it and within 1 (xy): its class sound 0, → 5 (from 3, +0x64 told 0x2f53e8) or 6 (+0x68), timer 120; not on it: within 24 (xy) in state 3 with the pad 5 above → +0x94 = +0x84 = 1, → 5, +0x64 and +0x60 told 0x2f53e8, timer 120; in state 4 with the pad 5 below → 6 | [`update`] |
 //! | states 5 / 6 | the spring (gp−0x4c98 = 1·dt², 1·dt², 2·dt) to the shaft's floor (5) or floor + height (6); there: 6 → 7, +0x64 told 0x2f5360; 5 → 8, +0x68 told 0x2f5360 | [`update`] (`creature::turn::spring`) |
 //! | states 7 / 8 | Ratchet off the pad (≥ 1 xy) → 3 / 4 | [`update`] |
-//! | tail | 0x14161b = (+0x94 ≠ 0); the glow +0x90: states 5..8 the colour gp−0x4c8c (phase 0), else the phase +300°/s and `FastTweenColor(clamp(4·sin − 3, 0, 1), gp−0x4c94, gp−0x4c90)` | [`update`] |
+//! | tail | 0x14161b = (+0x94 ≠ 0); the glow +0x90: states 5..8 the colour gp−0x4c8c (phase 0), else the phase +300°/s and `FastTweenColor(clamp(4·sin − 3, 0, 1), gp−0x4c94, gp−0x4c90)`; `CarryRiders(+0x20, position − old, old Euler, Euler)` (`0x26f2c8`) | [`update`] (`triggers::carry_riders`) |
 //! | 0x2f53e8 / 0x2f54a0 / 0x2f5360 | the linked mobys' +0xbc = 1 and, from their states 6 / 6 / 2: → 8 (class sound 0, shown, drawn, their seven parts → 9), → 2 (shown, drawn, +0x14 = 0, rotation x = +0x10, matrix; the parts → 3 likewise), → 4 (class sound 0, +0x18 = +0x14 = 0, the parts → 5) | [`field_close`], [`field_open`], [`field_lower`] |
 
 use crate::moby_runtime::{mode, MobyId};
@@ -133,6 +133,8 @@ fn dec(w: &mut World, id: MobyId, o: usize) -> i32 {
 
 pub fn update(w: &mut World, id: MobyId) {
     use crate::hero::bodies::body;
+    // The pose the tick's carry starts from (−position and the Euler, kept before the states).
+    let old = (w.m(id).position, w.m(id).rotation);
     let cls = w.classes.info(w.m(id).o_class).map_or(1.0, |i| i.scale);
     w.mm(id).scale = cls * SCALE;
     let (l60, l64, l68) = (linked(w, id, 0x60), linked(w, id, 0x64), linked(w, id, 0x68));
@@ -244,7 +246,7 @@ pub fn update(w: &mut World, id: MobyId) {
         5 | 6 => {
             glow_state = false;
             let six = w.m(id).state == 6;
-            let Some(s) = shaft(w, id) else { tail(w, id, glow_state); return };
+            let Some(s) = shaft(w, id) else { tail(w, id, glow_state, old); return };
             let mut t = s.centre()[2];
             if six { t += shaft_height(&s); }
             let dt = c::DT;
@@ -252,7 +254,7 @@ pub fn update(w: &mut World, id: MobyId) {
             turn::spring(t, RIDE_K * dt * dt, RIDE_K * dt * dt, RIDE_MAX * dt, &mut z, &mut v);
             w.mm(id).position[2] = z;
             c::set_pi32(w, id, 0x8c, v.to_bits() as i32);
-            if 0.01 <= (z - t).abs() { tail(w, id, glow_state); return; }
+            if 0.01 <= (z - t).abs() { tail(w, id, glow_state, old); return; }
             if six {
                 w.mm(id).state = 7;
                 field_lower(w, l64);
@@ -270,7 +272,7 @@ pub fn update(w: &mut World, id: MobyId) {
         }
         _ => {}
     }
-    tail(w, id, glow_state);
+    tail(w, id, glow_state, old);
 }
 
 /// The shaft cuboid's +0x28 (its matrix row 2's z: how far the pad rides up from the centre).
@@ -304,8 +306,9 @@ fn ride(w: &mut World, id: MobyId, l60: Option<MobyId>, l64: Option<MobyId>, l68
     c::set_pi32(w, id, 0x90, t);
 }
 
-/// The tail (0x2fcf74): 0x14161b = (+0x94 ≠ 0), the glow.
-fn tail(w: &mut World, id: MobyId, cycling: bool) {
+/// The tail (0x2fcf74): 0x14161b = (+0x94 ≠ 0), the glow, then `CarryRiders(+0x20, position − old, old Euler, Euler)`
+/// (level06 `0x26f2c8`): whoever stands on the pad rides it up and down the shaft.
+fn tail(w: &mut World, id: MobyId, cycling: bool, old: ([f32; 4], [f32; 4])) {
     let air = c::pi32(w, id, 0x94) != 0;
     w.hero_fields_mut().airless = Some(air as u8);
     let s = w.m(id).state;
@@ -319,5 +322,9 @@ fn tail(w: &mut World, id: MobyId, cycling: bool) {
         let f = (crate::hero::physics::fast_sin(crate::ps2v::Pf::f(a)).to_f32() * 4.0 - 3.0).clamp(0.0, 1.0);
         crate::hud::tween_color(f, GLOW_A, GLOW_B)
     };
-    w.mm(id).glow = colour;
+    let m = w.mm(id);
+    m.glow = colour;
+    let disp = std::array::from_fn(|i| m.position[i] - old.0[i]);
+    let rot = m.rotation;
+    crate::moby_update::triggers::carry_riders(&mut m.pvars, 0x20, disp, old.1, rot);
 }
