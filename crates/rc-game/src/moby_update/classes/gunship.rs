@@ -14,14 +14,14 @@
 //! alpha fades above z 125.
 //!
 //! **The scripted fly-by** (P+0x170 ≠ −1: gunship 695 over the bridge). Hidden and still until Ratchet enters cuboid
-//! P+0x170; then, unless the fly-by was seen before (its spawn id's killed bit: the troopers P+0x1f0 are woken at once
-//! and the gunship deleted), it shows up, and with a camera cuboid P+0x174 it starts the sequence: Ratchet's state
+//! P+0x170; then, unless the fly-by was seen before (`0x1bbb04[id]` or its spawn id's persistent death bit `0x14c190`:
+//! the troopers P+0x1f0 are woken at once and the gunship deleted), it shows up, and with a camera cuboid P+0x174 it starts the sequence: Ratchet's state
 //! 0x72, the camera script on that cuboid, `0x15f404` (`creature::Globals::cutscene`) set, no collision, not
 //! targetable, timer P+0x186 = 510 ticks. The first 120 ticks of the timer run in the first tick (the update loops
 //! until the timer is at 390: the ship jumps ahead along its path). It fires as above (the cutscene shells hit
 //! mobys: the bridge pieces 709–711); with 60 ticks left it wakes the troopers P+0x1f0 (+0x1e8 = 1, +0x1ec = 2
 //! ticks: they drop in); at the end the camera goes back to Ratchet (`CameraScript2(0)`, `SetState(0, 1)`), the flag
-//! clears, the spawn id's killed and death bits are set and the gunship is deleted. The camera and hero calls are
+//! clears, the spawn id's persistent death bit and this visit's are set and the gunship is deleted. The camera and hero calls are
 //! queued in `creature::Globals::scripts` ([`ScriptRequest`]) for the cutscene system and the hero.
 //!
 //! **A hit** (mask 0x800000; no Novalis weapon has it): `SpawnBeamExplosion(0, 0, 4, 2, 100000, 3, 15, …, 20 streaks,
@@ -195,16 +195,17 @@ fn init(w: &mut World, id: MobyId) {
     m.draw_dist = 0xff;
 }
 
-/// The fly-by was seen before: `0x1bbb04[id]` or the spawn id's killed bit (`0x14c190`).
+/// The fly-by was seen before: `g_spawn_id_flags` `0x1bbb04[id]` ≠ 0 or the spawn id's persistent death bit
+/// (`0x14c190 + L·0x100`), which the end of the fly-by sets: a later visit wakes the troopers and deletes the ship.
 fn seen(w: &World, id: MobyId) -> bool {
     let sid = w.m(id).spawn_id;
-    sid >= 0 && w.svc.save.killed.contains_key(&sid)
+    sid >= 0 && (w.svc.save.collected.get(&sid).is_some_and(|&f| f != 0) || w.svc.save.death.contains(&(w.svc.level, sid)))
 }
+/// The end of the fly-by (0x2f7728): the spawn id's persistent death bit (`0x14c190`) and this visit's (`0x1ba950`).
 fn set_seen(w: &mut World, id: MobyId) {
-    let (sid, m) = (w.m(id).spawn_id, w.m(id).mission);
+    let sid = w.m(id).spawn_id;
     if sid < 0 { return; }
     let lvl = w.svc.level;
-    w.svc.save.killed.insert(sid, m.wrapping_add(2));
     w.svc.save.death.insert((lvl, sid));
     w.svc.save.death_level.insert(sid);
 }
