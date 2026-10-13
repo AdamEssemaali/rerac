@@ -233,9 +233,14 @@ pub fn update(hero: &mut Hero, table: &mut MobyTable, _anim: &dyn super::anim::A
             }
         } else {
             let muzzle = guns::item_point(hero, env, 0);
+            // The arm raised at a wall (0x141618 = 1): the beam along the claw's −row 1 (its +0xd0), not the facing.
+            let raised = guns::arm_raised(hero).then(|| guns::item_rows(hero)).flatten();
             let t = &mut hero.weapons.tesla;
             t.start = muzzle;
-            t.end = add3(muzzle, with_len(to_f32x3(hero.moby_rows[0]), t.length));
+            t.end = match raised {
+                Some(r) => add3(muzzle, scale3(r[1], -t.length)),
+                None => add3(muzzle, with_len(to_f32x3(hero.moby_rows[0]), t.length)),
+            };
         }
         reset(&mut hero.weapons.tesla);
         build(hero, table, env, hits, rng);

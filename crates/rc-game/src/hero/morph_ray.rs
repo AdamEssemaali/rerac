@@ -8,7 +8,7 @@
 //! Ratchet stands, walks or runs (hero states 0, 1, 4, 5, 0xc), the item's draw sequence past key time 6, not being put
 //! away: **firing**. The arm comes up (`0x22ee08` when 0x1413f8 is clear); from the look stance 1 Ratchet goes into the
 //! first-person stance (`SetState(0x1e, 1)`). The aim is the camera's forward in first person, the item's −row 1 with
-//! the weapon lowered at a wall (0x141618 = 1: never set in the port), else Ratchet's facing: `(yaw, pitch)` =
+//! the weapon raised at a wall (0x141618 = 1, `super::idle`), else Ratchet's facing: `(yaw, pitch)` =
 //! `(FastArcTan(x, y), FastArcTan(|xy|, z))` at +0x48 / +0x4c. The muzzle is the item's joint list 0 (+0x00).
 //!
 //! **The search** ([`search`], `0x2d2018`) over the target list: nothing when the line from Ratchet (at the muzzle's
@@ -546,6 +546,9 @@ pub fn update(hero: &mut Hero, table: &mut MobyTable, _anim: &dyn super::anim::A
         if hero.state == 1 { hero.weapons.deferred = Some(0x1e); }
         let dir = if super::guns::first_person(hero) {
             env.camera.map(|c| c.1).unwrap_or(to_f32x3(hero.moby_rows[0]))
+        } else if let (true, Some(r)) = (super::guns::arm_raised(hero), super::guns::item_rows(hero)) {
+            // The arm raised at a wall (0x141618 = 1): along the gun's −row 1 (its +0xd0).
+            [-r[1][0], -r[1][1], -r[1][2]]
         } else {
             to_f32x3(hero.moby_rows[0])
         };

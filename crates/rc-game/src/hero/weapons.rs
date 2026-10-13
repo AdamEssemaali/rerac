@@ -457,7 +457,7 @@ pub fn draw_weapon(h: &mut Hero, c: &mut Ctx) {
     h.f13fa = def.w30 as u8;
     h.weapons.arm_item = id;
     let blend = if def.w18 != 0 { ticks(10) } else { ticks(11) };
-    if h.group == 0 {
+    if h.group == 0 && !h.arm_at_wall {
         h.weapons.layer_seq = def.anims[0];
         if def.anims[0] >= 0 { h.set_anim(c.anim, c.rng, Pf::from_i32(blend), def.anims[0] as u8, 0); }
         return;
@@ -502,7 +502,7 @@ pub(super) fn apply_pending(h: &mut Hero, c: &mut Ctx) {
 /// (`def +0x24`) over 11 ticks (an arm layer out fades), true: the caller (SetState 3, the stop's physics, the walk's
 /// slow stop in its transitions) gives up its own state; another item in hand → the weapon put away, false.
 pub(super) fn gun_stance(h: &mut Hero, c: &mut Ctx) -> bool {
-    if h.f13f8 == 0 || h.f13fa == 0 { return false; }
+    if h.f13f8 == 0 || h.f13fa == 0 || h.arm_at_wall { return false; }
     let id = h.held_item();
     if id != h.weapons.arm_item {
         put_away(h);
@@ -542,10 +542,10 @@ pub(super) fn stance_kept(h: &Hero, seq_b: u8) -> bool {
 }
 
 /// The idle transitions' weapon stance (0x242930 state 0, after Clank's fidget): with the arm raised, out of a blend
-/// (0x13fdec clear), the item drawn in hand → its standing sequence (`def +0x24`) over 11 ticks when Ratchet is not
+/// (0x13fdec clear), not raised at a wall (0x141618), the item drawn in hand → its standing sequence (`def +0x24`) over 11 ticks when Ratchet is not
 /// in it (an arm layer out fades); another item → put away.
 pub(super) fn idle_stance(h: &mut Hero, c: &mut Ctx) {
-    if h.f13f8 == 0 || c.anim.view().blending() || h.f13fa == 0 { return; }
+    if h.f13f8 == 0 || c.anim.view().blending() || h.f13fa == 0 || h.arm_at_wall { return; }
     let id = h.held_item();
     if id != h.weapons.arm_item {
         put_away(h);

@@ -36,6 +36,27 @@ pub fn item_point(hero: &Hero, env: &ItemEnv, list: usize) -> [f32; 3] {
     }
 }
 
+/// The hand item's rows (moby +0xc0 / +0xd0 / +0xe0) as `HeroItemsAttach` left them this tick.
+pub fn item_rows(hero: &Hero) -> Option<[[f32; 3]; 3]> {
+    hero.items.slot.item.as_ref().map(|it| it.rows.map(|r| [f32::from_bits(r[0]), f32::from_bits(r[1]), f32::from_bits(r[2])]))
+}
+
+/// The hand item's Euler angles (moby +0x40 / +0x44 / +0x48): `HeroItemsAttach` 0x22fec0 rewrites them every tick from
+/// its matrix (`FUN_002721f0`).
+pub fn item_euler(hero: &Hero) -> Option<[f32; 3]> {
+    use crate::ps2v::Pf;
+    let it = hero.items.slot.item.as_ref()?;
+    let r = |i: usize| [Pf::b(it.rows[i][0]), Pf::b(it.rows[i][1]), Pf::b(it.rows[i][2]), Pf::ZERO];
+    let e = crate::moby_update::services::rows_euler(&[r(0), r(1), r(2), [Pf::ZERO; 4]]);
+    Some([e[0].to_f32(), e[1].to_f32(), e[2].to_f32()])
+}
+
+/// The weapon arm raised at a wall (0x141618 = 1, `super::idle`'s `0x22b700`): the guns aim along it instead.
+pub fn arm_raised(hero: &Hero) -> bool { hero.arm_at_wall }
+
+/// Joint record 9's pitch now (0x17b174, its +0x44: the raised arm's angle).
+pub fn arm_pitch(hero: &Hero) -> f32 { hero.idle.joints[super::idle::joint::ARM].cur[1] }
+
 /// The guns' first-person test: the look stance 0x1e with Ratchet hidden by the first-person camera.
 pub fn first_person(hero: &Hero) -> bool { hero.state == 0x1e && hero.f13f5 != 0 }
 

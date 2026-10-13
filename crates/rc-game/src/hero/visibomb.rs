@@ -14,7 +14,7 @@
 //! With it: the aim — **first person** (state 1 with Ratchet hidden by the first-person camera, 0x1413f5): along the
 //! view, yaw `atan(fwd.x, fwd.y)`, pitch `−atan(|fwd.xy|, fwd.z)`, from the eye + 0.3·fwd − 0.35·up; else Ratchet's
 //! yaw (0x13f9d8 = 0x13f3e8 outside the grind group), pitch −0, from `polar(0.6, yaw, −0)` + the gun (0x141618 = 1,
-//! the lowered weapon's pitch from the gun's rows: never set in the port [L]); the gun's sequence 3; the help box
+//! the arm raised at a wall: the pitch of the gun's row 1, the point 0.6 along it); the gun's sequence 3; the help box
 //! suspended (`0x225a28`); the launch `0x2cb540(yaw, pitch, gun, point)` (+ `SetState(0x1d, 1)`, made right after the
 //! slot loop: `super::weapons::after_items`); the shot statistics 0x1416e8 (not ported: G-SAV-009); the fire timer
 //! `ticks(60)`. **Tail**: the gun's sequence 1 once its sequence wrapped (+0x70 & 2); +0x34 |= 4 (keep the matrix:
@@ -88,6 +88,12 @@ pub fn aim(hero: &Hero, env: &ItemEnv) -> (f32, f32, [f32; 3]) {
     }
     let yaw = hero.rot[2].to_f32();
     let gun = hero.items.slot.item.as_ref().map_or(to_f32x3(hero.pos), |it| it.position);
+    // The arm raised at a wall (0x141618 = 1): the pitch of the gun's row 1 (its +0xd0: the barrel is −row 1),
+    // `atan(|row1.xy|, row1.z)`, the point 0.6 along it.
+    if let (true, Some(r)) = (super::guns::arm_raised(hero), super::guns::item_rows(hero)) {
+        let p = atan((r[1][0] * r[1][0] + r[1][1] * r[1][1]).sqrt(), r[1][2]);
+        return (yaw, p, add3(crate::targeting::polar(0.6, yaw, -p), gun));
+    }
     (yaw, -0.0, add3(crate::targeting::polar(0.6, yaw, -0.0), gun))
 }
 

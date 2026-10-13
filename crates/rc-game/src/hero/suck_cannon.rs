@@ -46,8 +46,7 @@
 //! The held-count HUD element (`queue_animation_update(4, 0x753f, …)`, every tick of the update) is `crate::hud`'s,
 //! derived each tick from the cannon's state (`hud::Inputs::suck_active`, `update_suck` / `draw_suck`).
 //! Not ported: the stats 0x1416c8..
-//! (G-SAV-009), the gold cannon 0x13e529 (not mirrored: 5 slots; G-WPN-009), the aim with the weapon lowered at a wall
-//! 0x141618 (G-WPN-011). The pad's released mask 0x13cae8 |= 5 as it goes away with L1 / L2 held is ported (2026-10-01,
+//! (G-SAV-009), the gold cannon 0x13e529 (not mirrored: 5 slots; G-WPN-009). The pad's released mask 0x13cae8 |= 5 as it goes away with L1 / L2 held is ported (2026-10-01,
 //! G-HERO-025: `Gadgets::released_or`, applied to the pad by the tick right after the item updates).
 
 use super::guns::{self, add3, len3, scale3, sub3};
@@ -116,7 +115,8 @@ fn blend(hero: &mut Hero, env: &ItemEnv, seq: u8, n: i32) {
 fn wrapped(hero: &Hero) -> bool { hero.items.slot.item.as_ref().is_some_and(|it| it.anim.flags & 2 != 0) }
 
 /// The aim of the pull (`0x302ac0`): the mouth (joint list 0; in the look stance 1.2 along the view from Ratchet at the
-/// item's height), the yaw and pitch (the view's, else Ratchet's aim 0x13f9d8 / 0x13f9d4).
+/// item's height), the yaw and pitch (the view's, else Ratchet's aim 0x13f9d8 / 0x13f9d4; the gun's pitch +0x44 with
+/// the arm raised at a wall, 0x141618).
 fn aim(hero: &Hero, env: &ItemEnv) -> ([f32; 4], f32, f32) {
     let m = guns::item_point(hero, env, 0);
     let mut mouth = [m[0], m[1], m[2], 1.0];
@@ -128,16 +128,23 @@ fn aim(hero: &Hero, env: &ItemEnv) -> ([f32; 4], f32, f32) {
             return (mouth, atan(f[0], f[1]), atan(len2(f), f[2]));
         }
     }
-    (mouth, hero.rot[2].to_f32(), hero.rot[1].to_f32())
+    // The arm raised at a wall (0x141618 = 1): the pitch is the gun's own (its +0x44).
+    let pitch = if guns::arm_raised(hero) { guns::item_euler(hero).map_or(hero.rot[1].to_f32(), |e| e[1]) } else { hero.rot[1].to_f32() };
+    (mouth, hero.rot[2].to_f32(), pitch)
 }
 
 /// The vortex's frame (`0x3067d0`): the view's rows in the look stance under the first-person camera (forward,
-/// `up × forward` [L], up), else Ratchet's aim rows 0x13f990 (his moby rows).
+/// `up × forward` [L], up), with the arm raised at a wall the gun's (−row 1, row 0, row 2), else Ratchet's aim rows
+/// 0x13f990 (his moby rows).
 fn aim_rows(hero: &Hero, env: &ItemEnv) -> [[f32; 3]; 3] {
     if (hero.state == 1 || hero.state == 0x1e) && hero.f13f5 != 0 {
         if let (Some((_, f)), Some(u)) = (env.camera, env.camera_up) {
             return [f, guns::cross3(u, f), u];
         }
+    }
+    // The arm raised at a wall (0x141618 = 1; also the start `0x306528`): the gun's −row 1, row 0, row 2.
+    if let (true, Some(r)) = (guns::arm_raised(hero), guns::item_rows(hero)) {
+        return [[-r[1][0], -r[1][1], -r[1][2]], r[0], r[2]];
     }
     hero.moby_rows.map(to_f32x3)[..3].try_into().unwrap()
 }

@@ -217,7 +217,13 @@ pub fn update(hero: &mut Hero, table: &mut MobyTable, _anim: &dyn super::anim::A
         }
         _ => (scale3(to_f32x3(hero.moby_rows[0]), SPEED * DT), guns::item_point(hero, env, 0)),
     };
-    let (yaw0, pitch0) = guns::aim_angles(dir);
+    let (mut yaw0, mut pitch0) = guns::aim_angles(dir);
+    // Outside 0x1e with the arm raised at a wall (0x141618 = 1): the gun's own yaw (its +0x48) and the raised arm's
+    // pitch (joint record 9, 0x17b174).
+    if hero.state != 0x1e && guns::arm_raised(hero) {
+        if let Some(e) = guns::item_euler(hero) { yaw0 = e[2]; }
+        pitch0 = guns::arm_pitch(hero);
+    }
     let (mut yaw, mut pitch) = (yaw0, pitch0);
     let ground = hero.pitch.to_f32();
     if hero.state != 0x1e {

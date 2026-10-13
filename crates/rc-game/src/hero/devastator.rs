@@ -29,7 +29,7 @@
 //! then fading over `ticks(10)`, colour `(k, 0.8k, 0.5k)`.
 //!
 //! **Native.** Standard `f32`; the item is not a table moby (the missiles' owner is Ratchet's moby). 0x140600 (a forced
-//! target) and 0x141618 are 0 [L]; gold (0x13e52b) is not mirrored.
+//! target) is 0 [L]; with the arm raised at a wall (0x141618) the missile flies along the gun; gold (0x13e52b) is not mirrored.
 
 use super::guns::{self, add3, len3, scale3, sub3};
 use super::items::{HitSink, ItemEnv};
@@ -255,7 +255,14 @@ fn fire_missile(hero: &mut Hero, table: &mut MobyTable, env: &ItemEnv, hits: &mu
     let lock = hero.weapons.devastator.lock;
     let aim_of = |table: &MobyTable, t: Option<MobyId>, h: f32| t.and_then(|t| table.mobys.get(t)).and_then(targeting::aim_height).unwrap_or(h);
     let (yaw, pitch, myaw, mpitch, target);
-    if f.best < 2.0 {
+    if guns::arm_raised(hero) && hero.state != 0x1e {
+        // The arm raised at a wall (0x141618 = 1): along the gun's own yaw (its +0x48) and the raised arm's pitch
+        // (joint record 9, 0x17b174), at the lock (0x2c87a4's branch).
+        let gy = guns::item_euler(hero).map_or(yaw0, |e| e[2]);
+        let gp = guns::arm_pitch(hero);
+        aim_h = aim_of(table, lock, aim_h);
+        (yaw, pitch, myaw, mpitch, target) = (gy, gp, gy, gp, lock);
+    } else if f.best < 2.0 {
         aim_h = aim_of(table, lock, aim_h);
         (yaw, pitch, myaw, mpitch, target) = (f.yaw, f.pitch, f.yaw, f.pitch, lock);
     } else if lock.is_none() {
