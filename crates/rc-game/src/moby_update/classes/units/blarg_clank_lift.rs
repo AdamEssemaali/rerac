@@ -69,8 +69,9 @@ fn music(w: &mut World, track: i16, stinger: i16) {
 
 fn linked(w: &World, id: MobyId, o: usize) -> Option<MobyId> { usize::try_from(c::pi32(w, id, o)).ok().filter(|&m| m < w.table.mobys.len()) }
 
-/// The seven parts a linked moby lists (its pvar +0x24 .. +0x3c, table indices).
-fn parts(w: &World, m: MobyId) -> Vec<MobyId> { (0..7).filter_map(|k| usize::try_from(c::pi32(w, m, 0x24 + 4 * k)).ok().filter(|&p| p < w.table.mobys.len())).collect() }
+/// The seven parts a linked moby lists (its pvar +0x24 .. +0x3c, moby index + 1 as `petal_door` stores them, 0 =
+/// none; pointers in the game).
+fn parts(w: &World, m: MobyId) -> Vec<MobyId> { (0..7).filter_map(|k| usize::try_from(c::pi32(w, m, 0x24 + 4 * k) - 1).ok().filter(|&p| p < w.table.mobys.len())).collect() }
 
 /// `0x2f53e8(m)`: +0xbc = 1; from state 6: class sound 0, drawn, → 8, shown, +0x18 = 0, the parts → 9, shown, drawn.
 pub fn field_close(w: &mut World, m: Option<MobyId>) {

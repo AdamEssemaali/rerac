@@ -9,6 +9,7 @@ mod camera_levels;
 mod cutscene_novalis;
 mod level_ports;
 mod moby_collision_novalis;
+mod nebula_petal_doors;
 mod novalis_collision;
 mod novalis_world;
 mod sea_levels;

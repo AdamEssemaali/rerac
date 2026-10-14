@@ -9,7 +9,7 @@ use rc_formats::moby_anim::{parse_sequences, MobyAnimClass};
 use rc_formats::{collision, gadget, gameplay, moby_spawn};
 use rc_game::hero::Hero;
 use rc_game::moby_runtime::{mode, Moby, MobyId, MobyTable};
-use rc_game::moby_update::classes::units::{self, anim_idler, board_sparkle, linked_slider, petal_door, popup_turret, switched_mover, trip_block};
+use rc_game::moby_update::classes::units::{self, anim_idler, blarg_clank_lift, board_sparkle, linked_slider, petal_door, popup_turret, switched_mover, trip_block};
 use rc_game::moby_update::classes::{ClassUpdate, LevelPorts};
 use rc_game::moby_update::scheduler::{class_info, load_level_mobys};
 use rc_game::moby_update::services::{pvar as p, HitTemplate, World};
@@ -172,6 +172,62 @@ fn petal_door_makes_seven_petals_and_opens_with_them() {
     }
     assert_eq!(w.m(0).state, 6);
     assert!(petals.iter().all(|&q| w.m(q).state == 7 && w.m(q).mode & mode::HIDDEN != 0 && w.m(q).visible == 0));
+}
+
+/// The Clank lift's field_open / field_lower / field_close (0x2f54a0 / 0x2f5360 / 0x2f53e8) read a door's seven
+/// petals from its pvars +0x24..+0x3c: the slots `petal_door` filled with the moby index + 1 (0 = none). Reading
+/// them raw skips the door's own first petal and hits the next moby instead (the next door's first petal: the G34
+/// airlock doors desynced by one petal each).
+#[test]
+fn clank_lift_fields_act_on_the_doors_own_seven_petals() {
+    // Two doors, far from the hero and unlinked: their own triggers never fire.
+    let mut a = moby(1021, 0x40);
+    a.position = [100.0, 100.0, 50.0, 1.0];
+    let mut b = moby(1021, 0x40);
+    b.position = [200.0, 200.0, 50.0, 1.0];
+    for d in [&mut a, &mut b] { p::set_i32(&mut d.pvars, 0x1c, -1); }
+    let mut s = syn(vec![a, b]);
+    s.hero.pos = rc_game::hero::physics::v4(0.0, 0.0, 0.0);
+    let petals = |w: &World, d: MobyId| -> Vec<MobyId> { (0..7).map(|k| (p::i32(&w.m(d).pvars, 0x24 + 4 * k) - 1) as usize).collect() };
+    {
+        let mut w = s.w(0);
+        petal_door::update(&mut w, 0);
+        petal_door::update(&mut w, 1);
+    }
+    let (pa, pb) = {
+        let w = s.w(1);
+        (petals(&w, 0), petals(&w, 1))
+    };
+    // The petals' state-1 pass, then both doors swung open by the lift.
+    {
+        let mut w = s.w(2);
+        for &q in pa.iter().chain(&pb) { petal_door::update(&mut w, q); }
+        blarg_clank_lift::field_lower(&mut w, Some(0));
+        blarg_clank_lift::field_lower(&mut w, Some(1));
+    }
+    for t in 0..120 {
+        let mut w = s.w(3 + t);
+        for q in [0, 1].into_iter().chain(pa.iter().chain(&pb).copied()) { petal_door::update(&mut w, q); }
+    }
+    {
+        let w = s.w(124);
+        assert!(pa.iter().chain(&pb).all(|&q| w.m(q).state == 7), "both doors open");
+    }
+    // Leaving Clank: door 0 reset shut. Every one of its own petals, petal 0 included, shuts with it; door 1 and
+    // its petals stay open.
+    {
+        let mut w = s.w(125);
+        blarg_clank_lift::field_open(&mut w, Some(0));
+        let w = s.w(126);
+        assert_eq!((w.m(0).state, w.m(0).mode & mode::HIDDEN), (2, 0), "door 0 shut");
+        for (k, &q) in pa.iter().enumerate() {
+            assert_eq!((w.m(q).state, w.m(q).mode & mode::HIDDEN), (3, 0), "door 0 petal {k} shut");
+        }
+        assert_eq!((w.m(1).state, w.m(1).mode & mode::HIDDEN), (6, mode::HIDDEN), "door 1 still open");
+        for (k, &q) in pb.iter().enumerate() {
+            assert_eq!((w.m(q).state, w.m(q).mode & mode::HIDDEN), (7, mode::HIDDEN), "door 1 petal {k} still open");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------
