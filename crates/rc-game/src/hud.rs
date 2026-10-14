@@ -682,9 +682,9 @@ impl HudState {
         self.keep_up(h, n);
     }
 
-    /// `FUN_0024b090(handle, flags)`: replace the flags of the slot holding `handle`. The port's handles start at 0
-    /// like the empty slots' default, so only a slot holding an element matches (as [`HudState::keep_up`] /
-    /// [`HudState::release`]; without the guard a handle 0 cleared the wrong slot's flags).
+    /// `FUN_0024b090(handle, flags)`: replace the flags of the slot holding `handle`. Handles start at 1 and the empty
+    /// slots hold 0, so only a slot holding an element matches (as [`HudState::keep_up`] / [`HudState::release`];
+    /// without the guard a handle 0, none yet, set an empty slot's flags).
     pub fn set_flags(&mut self, handle: u32, flags: u32) {
         if let Some(s) = self.slots.iter_mut().find(|s| s.handle == handle && s.last.element != Element::Empty) {
             s.last.flags = flags;
@@ -768,7 +768,7 @@ impl HudState {
     /// `FUN_0024b4b0(handle, n)`: the slot holding `handle`, when its request is applied, keeps its timer at ≥ n;
     /// false when there is no such slot or it is still pending.
     pub fn keep_up(&mut self, handle: u32, n: i32) -> bool {
-        // (The port's handles start at 0 like the empty slots' default: only a slot holding an element matches.)
+        // (Handles start at 1 and the empty slots hold 0: only a slot holding an element matches a handle 0.)
         let Some(s) = self.slots.iter_mut().find(|s| s.handle == handle && !s.pending && s.element != Element::Empty) else { return false };
         s.timer = s.timer.max(n);
         true
