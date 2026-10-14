@@ -201,9 +201,14 @@ pub const PLANET_BANNER_TICKS: i32 = 0x49c;
 /// Entries kept in [`Cinematic::creature_log`].
 pub const LOG_LEN: usize = 64;
 
-/// `CameraScript(pos, euler, mode, ticks, collide)`.
+/// `CameraScript(pos, euler, mode, ticks, collide)`. Its store `0x167240 = pos` is seen at once by the rest of the
+/// moby loop (mode 3 keeps the current camera): Blarg's queen 1051 reads the camera back in the same tick to hold its
+/// cutaway there, and with last tick's position it held the follow camera's spot, looking 30° up past the queen.
 pub fn camera_script(w: &mut World, pos: [f32; 3], euler: [f32; 3], mode: u8, ticks: i32, collide: bool) {
     w.svc.cinematic.calls.push(CinematicCall::CameraScript { pos, euler, mode, ticks, collide });
+    if mode != crate::follow_camera::script::MODE_ORBIT {
+        w.camera = [crate::ps2v::Pf::f(pos[0]), crate::ps2v::Pf::f(pos[1]), crate::ps2v::Pf::f(pos[2]), crate::ps2v::Pf::ONE];
+    }
 }
 
 /// `0x316dd0` / `0x316e28`.

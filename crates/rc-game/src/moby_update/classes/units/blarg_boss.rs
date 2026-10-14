@@ -31,9 +31,9 @@
 //! | 9 / 10 / 0xb | the rear-up's end → 10 (seq 5); keys 1–8: spheres at joints 0..4 (0.5) and 5, 6 (1.1), damage 1, flags 1; the end → +0xbc (seq 1) | |
 //! | 0xc | circling; the timer out → `ticks(1200)`, 0xb (+0xbc 7, seq 6) | |
 //! | 0xd | home (facing within 45°, 4·dt); a target → 7; there → 7 (seq 1) | |
-//! | 0xe | flag 0x13d3ab; meter 0; update 0xff; seq done → `0x26e1f8(2, 20)` 1 up, the burst (0x6a2 ×1, 0x6a3 ×3, 6, 2), door +0x100 open, sliders down, 0xf (seq 1), hidden; no shots fired and flag 0x13d412 clear → it set, banner 0x53d6; morphed (+0x2e = 2): straight to 0xf | |
+//! | 0xe | flag 0x13d3ab; meter 0; update 0xff; seq done → `0x26e1f8(2, 20)` 1 up, the burst (0x6a2 ×1, 0x6a3 ×3, 6, 2), door +0x100 open, sliders down, 0xf (seq 1), hidden; no shots fired and flag 0x13d412 clear → it set, the jingle (level sound 1), banner 0x53d6; morphed (+0x2e = 2): straight to 0xf | |
 //! | 0xf | the first camera slot of class 0x12 (the boss camera) let go (`0x316330`: its record +0x50 = 1); in a scene (mode 2) → door +0xfc opened, deleted | [`update`] |
-//! | `0x2fa9c0` | the spline wall in 4..13; meter = health·16; a hit (0x330000) through the resolver (column 4) outside 0xe / 3 / 5: the weapon factor; health −; crossing 20 or 10 with no fade running → held there, a fade (`ticks(30)`); a fade running → not below its floor; ≤ 0 → reaction 1, else 1 → 5; 1 / 2: the meter released, 0xe, `SetDeathBits`, the checkpoint at cuboid +0xf8, not targetable, seq 10, flash 0xfa; 3..10: flash 200; the flash; morphed → the meter released, 0xe; from state 2 on a held fire button with a hand item other than 8 marks +0x178; the fade: out over its last `ticks(10)` → at 0 the next phase (health 19.95: 3, the cutaway; else 9.9: 5, Ratchet teleported to +0xf8, the cutaway), home, facing Ratchet, seq 6; in back over `ticks(10)`; glow (120°/s, 0x80808080 → 0x80804080); the target in its arena (range 255) | [`hits`] |
+//! | `0x2fa9c0` | the spline wall in 4..13; meter = health·16; a hit (0x330000) through the resolver (column 4) outside 0xe / 3 / 5: the weapon factor; health −; crossing 20 or 10 with no fade running → held there, a fade (`ticks(30)`); a fade running → not below its floor; ≤ 0 → reaction 1, else 1 → 5; 1 / 2: the meter released, 0xe, `SetDeathBits`, the checkpoint at cuboid +0xf8, not targetable, seq 10 (`ticks(10)`), flash 0xfa; 3..10: flash 200; the flash; morphed → the meter released, 0xe; from state 2 on a held fire button with a hand item other than 8 marks +0x178; the fade: out over its last `ticks(10)` → at 0 the next phase (health 19.95: 3, the cutaway; else 9.9: 5, Ratchet teleported to +0xf8, the cutaway), home, facing Ratchet, seq 6; in back over `ticks(10)`; glow (120°/s, 0x80808080 → 0x80804080); the target in its arena (range 255) | [`hits`] |
 
 use crate::moby_runtime::{mode, MobyId};
 use crate::moby_update::classes::crate_::set_death_bits;
@@ -149,7 +149,8 @@ fn cut_start(w: &mut World, id: MobyId) {
     story::teleport_to(w, pi(w, id, pv::CUBOID), 0x72, false);
     let me = c::pos(w, id);
     let r0 = c::set_len3(w.m(id).rows[0], 8.0);
-    let hz = super::hero_pos(w)[2];
+    // Ratchet's z after the teleport (the game's is immediate; the port's lands with the hero update).
+    let hz = story::cuboid(w, pi(w, id, pv::CUBOID)).map_or(super::hero_pos(w)[2], |(p, _)| p[2]);
     let cam = [me[0] + r0[0], me[1] + r0[1], hz + 2.0 + r0[2], 0.0];
     let e = [0.0, -c::atan(c::dist2(cam, me), me[2] - cam[2]) - 30.0 * DEG, heading(cam, me)];
     crate::cinematic::camera_script(w, [cam[0], cam[1], cam[2]], e, 1, 0, false);
@@ -339,11 +340,12 @@ fn next_phase(w: &mut World, id: MobyId) {
     if !high { story::teleport_to(w, pi(w, id, pv::CUBOID), 0x72, true); }
     let home = c::pv4(w, id, pv::HOME);
     c::set_pos(w, id, home);
-    let h = super::hero_pos(w);
+    // Facing Ratchet where the teleport put him (the game's is immediate).
+    let h = if high { super::hero_pos(w) } else { story::cuboid(w, pi(w, id, pv::CUBOID)).map_or(super::hero_pos(w), |(p, _)| [p[0], p[1], p[2], 0.0]) };
     let yaw = heading(home, h);
     c::set_yaw(w, id, yaw);
     w.build_matrix(id);
-    blend(w, id, 6, 5);
+    if seq(w, id) != 6 { blend(w, id, 6, 5); }
     cut_start(w, id);
 }
 
@@ -397,7 +399,7 @@ fn hits(w: &mut World, id: MobyId) {
                     crate::moby_update::classes::checkpoint::record(w, crate::moby_update::classes::checkpoint::Record { pos: p, rot: e });
                 }
                 w.mm(id).mode &= !mode::TARGETABLE;
-                c::blend_to(w, id, 10, 0, 0);
+                if seq(w, id) != 10 { blend(w, id, 10, 10); }
                 c::set_pu8(w, id, pv::F + 7, 0xfa);
             }
             3..=10 => c::set_pu8(w, id, pv::F + 7, 200),
@@ -621,6 +623,7 @@ pub fn update(w: &mut World, id: MobyId) {
                 let k = story::skill_index(0x13_d412);
                 if pi(w, id, pv::FIRED) == 0 && !story::skill_point(w, k) {
                     story::set_skill_point(w, k);
+                    w.play_level_sound(story::SKILL_SOUND, 0, None);
                     crate::cinematic::show_banner(w, 0x53d6, -1);
                 }
                 return;
