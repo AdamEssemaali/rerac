@@ -43,6 +43,14 @@ pub const ICON_BOSS: u16 = 30050;
 /// 0x15f8e8: the boss meter's centre x; 0x15f8f0 / 0x15f8f4: the end segments' squeeze.
 const BOSS_X: i32 = 276;
 const BOSS_SQUEEZE: [f32; 2] = [0.7, 0.7];
+/// Level 02's counters (0x23cda8; level02 .data 0x15f91c / 0x15f920 / 0x15f944 / 0x15f948 / 0x15f950 / 0x15f954 /
+/// 0x15f958 / 0x15f95c): the ramp divisors, the left / right x, the bar length (max < 10 / ≥ 10) and the count's
+/// colour tween. The bar icon is the shared 0x7580 ([`icon::BAR`]); the format is "%d".
+const COUNTER_STEPS: i32 = 8;
+const COUNTER_X: [i32; 2] = [24, 480];
+const COUNTER_LEN: [i32; 2] = [48, 70];
+const COUNTER_TEXT_FROM: u32 = 0x00e0_8080;
+const COUNTER_TEXT_TO: u32 = 0x80e0_8080;
 
 /// The bubble radius by index: the inits (0x24b900, 0x24c1a8) switch at 10 and 20, the updates (0x24baf0, 0x24c398)
 /// at 10 and 30 (both kept as the code has them).
@@ -332,5 +340,45 @@ impl HudState {
         }
         out.push(Draw::Sprite { frame: self.assets.icon_frame(ICON_BOSS, 2), x: xk, y, w: 0x20, h: 0x20, alpha: a, rot: Rot::None });
         for f in [4, 0] { out.push(Draw::Sprite { frame: self.assets.icon_frame(ICON_BOSS, f), x: x0 - 0x28, y: y - 8, w: 0x30, h: 0x30, alpha: a, rot: Rot::None }); }
+    }
+
+    /// Level 02's counters (0x23cda8): on whichever side of the screen the slot's anchor sits (left of x 257), a
+    /// stretched bar behind the element's icon and the count. The slide counter (`fade[0]`) grows the bar and its
+    /// alpha (`128·grow`, `·0.7`), the alpha counter (`fade[1]`) shades the count's colour; nothing at slide 0.
+    /// The bar is 32 tall at y = H − 50: cap / middle (icon 0x7580) / flipped cap, the icon (`HudFrame`) then the
+    /// count (regular font, right-aligned) with a black shadow.
+    pub(super) fn draw_aridia_counter(&self, i: usize, out: &mut Vec<Draw>) {
+        let s = &self.slots[i];
+        if s.slide == 0 { return; }
+        let grow = (s.slide as f32 / COUNTER_STEPS as f32).clamp(0.0, 1.0);
+        let shade = (s.alpha as f32 / COUNTER_STEPS as f32).clamp(0.0, 1.0);
+        // `hud_screen_position` (0x24b108): the anchor + flags, only to pick the side.
+        let left = self.align(i).0 < 0x101;
+        let x = COUNTER_X[if left { 0 } else { 1 }];
+        let y = SCREEN_H - 0x32;
+        let alpha = ((grow * 128.0) as i32 as f32 * 0.7) as i32;
+        let len = if s.max < 10 { COUNTER_LEN[0] } else { COUNTER_LEN[1] };
+        let bar = x + 4;
+        let width = (len as f32 * grow) as i32;
+        let cap = self.assets.icon_frame(icon::BAR, 1);
+        let mid = self.assets.icon_frame(icon::BAR, 0);
+        if left {
+            out.push(Draw::Sprite { frame: cap, x: x - 0x1c, y, w: 0x20, h: 0x20, alpha, rot: Rot::None });
+            out.push(Draw::Sprite { frame: mid, x: bar, y, w: width, h: 0x20, alpha, rot: Rot::None });
+            out.push(Draw::Sprite { frame: cap, x: bar + width, y, w: 0x20, h: 0x20, alpha, rot: Rot::R180 });
+        } else {
+            out.push(Draw::Sprite { frame: cap, x: bar, y, w: 0x20, h: 0x20, alpha, rot: Rot::R180 });
+            let px = bar - width;
+            out.push(Draw::Sprite { frame: mid, x: px, y, w: width, h: 0x20, alpha, rot: Rot::None });
+            out.push(Draw::Sprite { frame: cap, x: px - 0x20, y, w: 0x20, h: 0x20, alpha, rot: Rot::None });
+        }
+        let icon_x = if left { x } else { x - 0x16 };
+        self.hud_frame(i, self.assets.icon_frame(s.icon, 0), icon_x, y, 0, 0x80, out);
+        let bright = tween_color(shade, COUNTER_TEXT_FROM, COUNTER_TEXT_TO);
+        let dark = tween_color(shade, 0, 0x8000_0000);
+        let text = s.shown.to_string().into_bytes();
+        let (tx, ty) = if left { (x + 0x42, y + 8) } else { (x - 0x1a, y + 8) };
+        self.text_right(tx + 1, ty + 1, dark, &text, out);
+        self.text_right(tx, ty, bright, &text, out);
     }
 }

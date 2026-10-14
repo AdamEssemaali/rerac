@@ -81,6 +81,16 @@ impl Calls {
         r
     }
 
+    /// Level 02's counters (module doc): publishes `value` under `key` and queues the counter (an unchanged request is
+    /// a no-op); returns the request, for [`Calls::set_flags`] when the counters go. The game queues each once and
+    /// reads its data pointer every tick, so a consumer calls this every tick it shows them.
+    pub fn aridia_counter(&mut self, key: u32, slot_flags: u32, icon: u16, value: i32, max: i32) -> Request {
+        let r = Request::aridia_counter(slot_flags, icon, key, max);
+        self.data(key, value);
+        self.queue(r);
+        r
+    }
+
     /// The calls after sequence number `cursor` (exclusive; `None`: all kept), and the cursor to keep. A cursor past
     /// the log's end (a new log: the level was reloaded) reads it from its start.
     pub fn since(&self, cursor: Option<u64>) -> (Vec<Call>, Option<u64>) {
@@ -101,4 +111,10 @@ pub fn pvar_key(spawn_id: i16, id: usize, offset: usize) -> u32 {
 impl Request {
     /// The boss meter's request (module doc).
     pub fn boss(key: u32, max: i32) -> Request { Request { slot: 6, flags: 0x10, icon: 0xffff, element: Element::Boss { key }, max } }
+
+    /// Level 02's counter's request (`queue_animation_update(slot_flags, icon, 0x23c990, 0x23ccc8, 0x23cda8, …,
+    /// max)`): the slot / flags and icon as the agent 788 passes them.
+    pub fn aridia_counter(slot_flags: u32, icon: u16, key: u32, max: i32) -> Request {
+        Request { slot: (slot_flags & 0xf) as u8, flags: slot_flags & 0xfff0, icon, element: Element::AridiaCounter { key }, max }
+    }
 }
