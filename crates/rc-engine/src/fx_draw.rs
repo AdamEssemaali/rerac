@@ -892,7 +892,9 @@ fn draw_list1(
                         let scene = matches!(p.svc.game_mode, 2 | 6);
                         let list: &[rc_game::hero::glow::Sprite] = if scene || p.game.hero.mode == 0 { &g.list } else { &[] };
                         let dot = if scene { None } else { g.dot.as_ref() };
-                        for s in dot.into_iter().chain(list) {
+                        // The scene actors' sprites (`FUN_00228bc0`'s `FUN_00229738`: rc_game::scene_actors) after the hero's.
+                        let actors: &[rc_game::hero::glow::Sprite] = if scene { &p.svc.actor_records.glow } else { &[] };
+                        for s in dot.into_iter().chain(list).chain(actors) {
                             if let Some(pt) = at(s.at) { glow_quad(&mut b, s.size, s.pull, pt, s.rgba, cam); }
                         }
                         out.push(FxGroup { fx: GLOW_FX, additive: true, subtract: false, prims: b });

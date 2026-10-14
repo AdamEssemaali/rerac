@@ -299,7 +299,7 @@ fn load_spaceship_class(level: &mut crate::level_load::LoadedLevel, o_class: i32
 }
 
 /// The World of the play state (the mode-6 code runs on the level's moby table, outside the tick).
-fn with_world<R>(p: &mut Play, coll: Option<&rc_formats::collision::Collision>, f: impl FnOnce(&mut World) -> R) -> R { with_world_view(p, coll, None, f) }
+pub(crate) fn with_world<R>(p: &mut Play, coll: Option<&rc_formats::collision::Collision>, f: impl FnOnce(&mut World) -> R) -> R { with_world_view(p, coll, None, f) }
 
 /// [`with_world`] with the last drawn frame's `FastBSphereCheck` view (the ship shadow's depth fade reads it).
 fn with_world_view<R>(p: &mut Play, coll: Option<&rc_formats::collision::Collision>, view: Option<&rc_game::particles::BSphereView>, f: impl FnOnce(&mut World) -> R) -> R {

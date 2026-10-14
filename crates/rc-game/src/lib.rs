@@ -54,6 +54,7 @@ pub mod frontend;
 pub mod inventory;
 pub mod menus;
 pub mod scene_player;
+pub mod scene_actors;
 pub mod movie_player;
 pub mod cheats;
 pub mod slideshow;

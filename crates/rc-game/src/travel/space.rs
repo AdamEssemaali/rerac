@@ -23,7 +23,7 @@
 //! | 0x2a4080 subs 0 / 8 | 0x13e054++; fade −= 0.125 (≥ 0); scene / chunk tick +1; skip = 0x13e058, or (✕ / △ pressed, tick > `ticks(30)`, fade 0) and (take-off: tick < `ticks(558 − 30)`; landing: tick < end − `ticks(30)`); a skip stops the stream; take-off → tick = `ticks(558)`, its chunk parsed, chunk tick = tick % 96, `FadeToBlack(4)` (none with 0x13e058, which is cleared), fade 1.0; landing → tick = end | [`ShipMode::scene_tick`] |
 //! | | the camera: the record of the chunk tick, ship-local: eye `rows·e + pos`, angle z + the ship's yaw; tan(hfov/2) the record's; the mirror cheat 0x15edb4: `FastVecCross(left, up, forward)` | [`ShipMode::scene_tick`] (`scene_player::scene_camera`) |
 //! | | each actor: frame f = chunk tick >> 1, f + 1, t = (tick & 1)·0.5 (1.0 on an odd tick of a cut record); position = the lerp of its track, ship-local; +0x71 = 0xff; yaw = the ship's; +0x52 / +0x53 the class's streamed slot; `MobyBuildMatrix` (the streamed sequence's bounding sphere) | [`ShipMode::scene_tick`] (the poses: [`SpaceFrame::actors`]; the table mobys written; the streamed class: [`ShipMode::actor_anim_for`]) |
-//! | | class 0: +0x7f (its shadow) = take-off: 0 on level 10 without item 6, else 0x18 until `ticks(62)`; landing: 0x18 past `ticks(360)` (level 10: only with item 6), else 0; class 10: take-off 0x18 until `ticks(350)`, landing 0x18 past `ticks(524)`; +0x7f ≠ 0 → `FUN_0026f0e0`; class 10 → `FUN_00228bc0`; class 0 → `FUN_0024a1d0` and, on level 10 with item 6 or on level 13, the helmet: `CreateMoby(0x509)` once (+0x32 = 0x40, mode \|= 0x806, Ratchet's light, +0x73 = 0x18), `FUN_0024a310` (on Ratchet's joint 4) | +0x7f [`ShipMode::scene_tick`]; `FUN_0026f0e0` and the actors' shadows: [`SpaceFrame::scene_actors`] (`rc-engine` `shadow_render`); `FUN_00228bc0`: [`clank_actor`] (its glow sprite: NOT ported, G-REN-005); `FUN_0024a1d0`: [`ShipMode::ratchet_actor`] (its `FUN_0024a0e8`: NOT ported, G-CUT-009); the helmet: [`ShipMode::helmet`] |
+//! | | class 0: +0x7f (its shadow) = take-off: 0 on level 10 without item 6, else 0x18 until `ticks(62)`; landing: 0x18 past `ticks(360)` (level 10: only with item 6), else 0; class 10: take-off 0x18 until `ticks(350)`, landing 0x18 past `ticks(524)`; +0x7f ≠ 0 → `FUN_0026f0e0`; class 10 → `FUN_00228bc0`; class 0 → `FUN_0024a1d0` and, on level 10 with item 6 or on level 13, the helmet: `CreateMoby(0x509)` once (+0x32 = 0x40, mode \|= 0x806, Ratchet's light, +0x73 = 0x18), `FUN_0024a310` (on Ratchet's joint 4) | +0x7f [`ShipMode::scene_tick`]; `FUN_0026f0e0` and the actors' shadows: [`SpaceFrame::scene_actors`] (`rc-engine` `shadow_render`); `FUN_00228bc0`: [`crate::scene_actors::clank`]; `FUN_0024a1d0`: [`crate::scene_actors::ratchet`] (its `FUN_0024a0e8`: NOT ported, G-CUT-009); the helmet: [`ShipMode::helmet`] |
 //! | | the ship classes 531..533: glass `RegisterDrawCallback2(0x2a70a8)`, shadow `RegisterDrawCallback(0x2a2130)`; take-off: the glow pulse `cos(((tick & 0x3f) − 0x20)·π/32)·80 + 0x78` until `ticks(360)`; to `ticks(504)`: `min(0xff, (tick − 360)·1.25)` (533: no red), past `ticks(420)` the real ship's flames (+0xbc = (tick − 420)·1.2, +0xb2 = 0), past `ticks(464)` white += 0.025 (≤ 1); then white −= 0.025 (≥ 0), glow 0xa0a0a0; landing: until `ticks(240)` the exhaust (`fun_0022f5b0(−4·dt)`, `(−3·dt)` until `ticks(200)`), the pulse, flames (+0xbc = 0x32, +0xb2 = 10); to `ticks(360)`: the real ship's flames dying (+0xbc = (300 − tick)·1.5 until `ticks(300)`), glow `(360 − tick)·1.25`; then the pulse | [`ship_fx`] |
 //! | | the end (tick ≥ end): stream stopped, tan 0.63, the actors deleted (their class slots freed) and the helmet, the ship shown (mode &= ~1), classes 74 / 203 &= ~0x80; take-off: `EnterMenuMode(0)` with kind 0xe (the planet page), 0x15f5d8 = 1; landing: mode 0, `music_Unpause`, 0x15f5d8 = 1, 0x1413f5 = 0, `FUN_002487a8` (shown), then the level-start landing `FUN_0024a3d8` (a point 0.75 behind him, `GroundHeight` from 0.5 up; within 0.3: placed there and `0x249580(yaw, point, 1)`, the walk-to) or `HeroTeleport(0x13e090, 0x13e0a0, 0, 1)` | [`ShipMode::scene_end`] |
 //! | 0x2a4080 sub 3 | the first tick: `music_Pause(0)`, the stream 40015 + ship, `FadeToBlack(ticks(12))`, the ship's sequences 1 → 2 at t 0, +0x72 = 0xff, +0x94 = 0; with a path: the riders `CreateMoby(0)` / `CreateMoby(10)` (+0x32 = 0x1ff, +0x72 = 0xff, +0x94 = 0, mode \|= 6, the hero's light); `CameraScript(0x167240, 0x167250, 1, 0, 0)`; the path's points get their turn rates as w (normalised to 20° at the sharpest), the first segment's length, the start (ship) and end (point 0) of the approach, its pitch and yaw | [`ShipMode::fly_away_start`] |
@@ -326,8 +326,6 @@ pub struct ShipMode {
     /// Per actor: its class animation with the streamed slot, for the chunk it was set for ([`ShipMode::actor_joint`]).
     /// The flight's: the streamed frame its slot was last patched from ([`flight_sequence`]).
     pub actor_anim: Vec<Option<ActorAnim>>,
-    /// 0x17c7c0 attached: the Ratchet actor's head manipulator of this scene (`FUN_0024a1d0`; the entry clears it).
-    pub head_attached: bool,
     /// A weapon demo's frame ([`SUB_DEMO`]).
     pub demo: Option<DemoFrame>,
 }
@@ -354,7 +352,6 @@ impl Default for ShipMode {
             flight: Flight::default(),
             stream: None,
             actor_anim: Vec::new(),
-            head_attached: false,
             demo: None,
         }
     }
@@ -437,7 +434,8 @@ impl ShipMode {
         self.helmet = None;
         self.actor_anim.clear();
         // The scene state 0x16cce0 / 0x17c7c0 / 0x17c800 cleared: the actors' manipulator records.
-        self.head_attached = false;
+        w.svc.actor_records.head = false;
+        w.svc.actor_records.noggin[0] = false;
         self.sub = sub;
         self.tick = 0;
         self.chunk = 0;
@@ -615,7 +613,8 @@ impl ShipMode {
         self.actor_anim.clear();
         self.last_actors.clear();
         self.last_camera = None;
-        self.head_attached = false;
+        // `VendorStartWeaponDemo`: the record 0x17c7c0 cleared.
+        w.svc.actor_records.head = false;
         self.fade = 0.0;
         self.white = 0.0;
         self.demo = Some(frame);
@@ -777,6 +776,8 @@ impl ShipMode {
         let cut = rec.is_cut();
         let f = (self.chunk_tick >> 1) as usize;
         let mut poses = Vec::new();
+        // The glow list 0x141200 the hero update emptied this tick: the actors' sprites start over.
+        w.svc.actor_records.glow.clear();
         for (k, a) in chunk.actors.iter().enumerate() {
             let (id, class) = self.actors.get(k).copied().unwrap_or((None, a.class));
             let mut t = (self.chunk_tick & 1) as f32 * 0.5;
@@ -841,44 +842,19 @@ impl ShipMode {
                     0
                 };
                 w.mm(id).b7f = b7f;
-                clank_actor(w, id);
+                let anim = self.actor_anim_for(w, k, class, Some(seq)).map(|a| a.0);
+                crate::scene_actors::clank(w, id, anim.as_deref());
             }
             c if (531..=533).contains(&c) => ship_fx(self, w, id, k),
             _ => {}
         }
     }
 
-    /// `FUN_0024a1d0` on the Ratchet actor: the head manipulator (record 0x17c7c0, joint list 0x18) attached once per
-    /// scene with Ratchet's head scale 0x15ee14 (at most 1.33 in game mode 6); on levels 2, 9, 11 and 13 the actors of
-    /// classes 0x1b1 / 0x50a / 0x509 take their class scale × that scale. `FUN_0024a0e8`'s part (game modes 2 / 6:
-    /// 0x509 / 0x50a actors mode \| 0x800, the hero's worn items attached to and shown on this actor,
-    /// `HeroComputeAttachMatrices` / `HeroItemsAttach` / `FUN_00249ea0`) is NOT ported (G-CUT-009).
+    /// `FUN_0024a1d0` on the Ratchet actor ([`crate::scene_actors::ratchet`]; its `FUN_0024a0e8` is NOT ported,
+    /// G-CUT-009).
     fn ratchet_actor(&mut self, w: &mut World, id: MobyId) {
-        let mut s = w.hero.idle.rec17_scale;
-        if w.svc.game_mode == 6 && 1.33 < s { s = 1.33; }
-        if !self.head_attached {
-            self.head_attached = true;
-            match crate::moby_update::manip::target_joint(w, id, 0x18) {
-                Some(joint) => {
-                    let node = rc_formats::moby_anim::JointModifier { joint, mode: 0, weight: 0.0, quat: [0.0, 0.0, 0.0, 1.0], scale: [s; 3], trans: [0.0; 3] };
-                    let m = w.mm(id);
-                    if m.joint_mod_keys.len() != m.joint_mods.len() { m.joint_mod_keys.resize(m.joint_mods.len(), u32::MAX); }
-                    m.joint_mods.insert(0, node);
-                    m.joint_mod_keys.insert(0, ACTOR_HEAD_KEY);
-                }
-                None => w.svc.unported("mode-6 Ratchet actor: joint list 0x18 not loaded"),
-            }
-        }
-        if matches!(w.svc.level, 2 | 9 | 11 | 13) {
-            for (a, _) in self.actors.clone() {
-                let Some(a) = a else { continue };
-                let oc = w.m(a).o_class;
-                if matches!(oc, 0x1b1 | 0x50a | 0x509) {
-                    let base = w.classes.info(oc).map_or(1.0, |i| i.scale);
-                    w.mm(a).scale = base * s;
-                }
-            }
-        }
+        let actors: Vec<Option<MobyId>> = self.actors.iter().map(|a| a.0).collect();
+        crate::scene_actors::ratchet(w, id, &actors);
     }
 
     /// The helmet `CreateMoby(0x509)` (0x13e038, once per scene: +0x32 = 0x40, mode \| 0x806, the actor's light words,
@@ -1411,40 +1387,6 @@ pub const CARD_SPIN_CENTRE: [i32; 2] = [1216 / 16, 64];
 fn build_with(w: &mut World, id: MobyId, anim: Option<&rc_formats::moby_anim::MobyAnimClass>) {
     crate::moby_update::scheduler::rebuild_matrix(&mut w.table.mobys[id], anim);
     Arc::make_mut(&mut w.svc.grid).register(&mut w.table.mobys[id]);
-}
-
-/// The key of the Ratchet actor's head manipulator (record 0x17c7c0) in its joint-modifier list.
-pub const ACTOR_HEAD_KEY: u32 = 0xffff_ffe0;
-/// The key of the Clank actor's noggin manipulator (record 0x17c800).
-pub const ACTOR_NOGGIN_KEY: u32 = 0xffff_ffe1;
-
-/// `FUN_00228bc0` on a Clank actor (class 10; the same code runs for classes 419 and 1365 in mode-2 scenes): mode \|=
-/// 0x10 (the glow drawn), the glow word +0x90 = s = `fast_sin(2π·(0x15f5cc % ticks(100))/ticks(100) − π)`, `(0x4c +
-/// 24s) << 16 \| 0x80000000 \| (0xa2 + 52s) << 8 \| (0x44 + 24s)`; the cheat 0x15edb3 ("Clank has a large noggin"):
-/// the manipulator 0x17c800 on joint list 2, scale 0x15ee18, attached once. The glow sprite at joint list 1 (`FUN_00229738
-/// (0.047, 0.15, point − 0.007 z, 0x200000c0)`: the hero's glow list 0x141120 drawn by the hero's draw callback
-/// 0x229440) is NOT ported (G-REN-005).
-fn clank_actor(w: &mut World, id: MobyId) {
-    let period = w.ticks(100).max(1);
-    let f = (w.counter as i64).rem_euclid(period as i64) as f32 / period as f32;
-    let s = ((f + f) * std::f32::consts::PI - std::f32::consts::PI).sin();
-    let (a, b) = ((s * 24.0) as i32, (s * 52.0) as i32);
-    let m = w.mm(id);
-    m.mode |= 0x10;
-    m.glow = ((a + 0x4c) as u32) << 16 | 0x8000_0000 | ((b + 0xa2) as u32) << 8 | (a + 0x44) as u32;
-    if w.svc.cheats.on(crate::cheats::slot::CLANK) && !w.m(id).joint_mod_keys.contains(&ACTOR_NOGGIN_KEY) {
-        match crate::moby_update::manip::target_joint(w, id, 2) {
-            Some(joint) => {
-                let sc = w.hero.bodies.scale18;
-                let node = rc_formats::moby_anim::JointModifier { joint, mode: 0, weight: 0.0, quat: [0.0, 0.0, 0.0, 1.0], scale: [sc; 3], trans: [0.0; 3] };
-                let m = w.mm(id);
-                if m.joint_mod_keys.len() != m.joint_mods.len() { m.joint_mod_keys.resize(m.joint_mods.len(), u32::MAX); }
-                m.joint_mods.insert(0, node);
-                m.joint_mod_keys.insert(0, ACTOR_NOGGIN_KEY);
-            }
-            None => w.svc.unported("mode-6 Clank actor: joint list 2 not loaded"),
-        }
-    }
 }
 
 /// 0x1be060[v]: the flight shell's direction per variant.

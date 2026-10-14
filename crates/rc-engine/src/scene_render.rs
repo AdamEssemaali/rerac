@@ -35,8 +35,9 @@
 //!   (record + palette per actor; a new scene never uploads the last scene's records / palette). The streamed sequence goes into the actor's own copy of its class animation at slot
 //!   = the class's sequence count (`class+0xc`, then `+0xc++`), re-pointed at every chunk; the pose is
 //!   `MobyAnimEval` of (slot, frame f, slot, f + 1, t). Rows = identity (no rotation track; `CreateMoby`
-//!   leaves the rotation 0), scale = the class scale, lights = Ratchet's light word and ambient (+0x38 copied
-//!   from the hero). A class missing from the level core that is a spaceship class (530..=533) is loaded from
+//!   leaves the rotation 0), scale = its moby's (the class scale; `FUN_0024a1d0` changes some), lights = the hero
+//!   moby's light word and ambient as they are when the actor is created (+0x38..+0x3f copied, so the scene is lit
+//!   like the place Ratchet stands in). A class missing from the level core that is a spaceship class (530..=533) is loaded from
 //!   the global `spaceships` file (entry class − 530) like crate::moby_spawn's ship.
 //! * **Camera**: [`ActiveScene::camera`] (`SceneCamera`: eye, forward/left/up rows, tan(hfov/2)) replaces the
 //!   play camera's transform and projection tangent after `play_camera::apply` (same `RunFixedMainLoop`
@@ -153,6 +154,10 @@ struct Actor {
     base: u32,
     slots: u32,
     entities: Vec<Entity>,
+    /// The glow word its table moby carries this frame (mode 0x10: `FUN_00228bc0`'s pulse) and the one last written to
+    /// its slot ([`upload`]).
+    glow: Option<u32>,
+    glow_drawn: Option<u32>,
 }
 
 /// The running scene, published for the play camera, the HUD and the reports.
@@ -191,8 +196,6 @@ pub(crate) struct SceneRuntime {
     actors: Vec<Actor>,
     extra: Option<ExtraMobys>,
     palette_len: u32,
-    light_word: u32,
-    ambient: [u8; 3],
     language: usize,
     /// `RC_SUBTITLES` (None: the game's option 0x15ee40).
     subtitles: Option<bool>,
@@ -231,8 +234,6 @@ impl Plugin for SceneRenderPlugin {
                 actors: Vec::new(),
                 extra: None,
                 palette_len: 0,
-                light_word: 0,
-                ambient: [0x38; 3],
                 language: crate::hud_render::language() as usize,
                 subtitles,
                 glyphs: None,
@@ -617,8 +618,6 @@ fn spawn_actors(
     materials: &mut Assets<MobyMaterial>,
     buffers: &mut Assets<ShaderBuffer>,
 ) -> Result<()> {
-    // +0x38: Ratchet's light word and ambient.
-    if let Some(i) = level.mobys.instances.iter().find(|i| i.o_class == 0) { (rt.light_word, rt.ambient) = (i.light_word(), i.ambient_rgb()); }
     let mut specs = Vec::new();
     let mut palette_len = 0u32;
     let lists = actor_joint_lists(level, &scene.actor_classes());
@@ -662,7 +661,7 @@ fn spawn_actors(
         println!("scene: actor {k}: class {o_class} ({} joints, streamed sequence in slot {slot}), {} entities", anim.joint_count, entities.len());
         let scale = class.as_ref().map_or(1.0, |c| c.class.header.scale);
         let joint_lists = lists.get(&o_class).cloned().unwrap_or_default();
-        rt.actors.push(Actor { scale, anim: Arc::new(anim), o_class, joint_lists, pose: None, moby: None, slot, chunk: None, base, slots, entities });
+        rt.actors.push(Actor { scale, anim: Arc::new(anim), o_class, joint_lists, pose: None, moby: None, slot, chunk: None, base, slots, entities, glow: None, glow_drawn: None });
     }
     rt.extra = Some(extra);
     rt.palette_len = palette_len;
@@ -696,8 +695,9 @@ fn enter_mode2(rt: &mut SceneRuntime, p: &mut Play) {
     use rc_game::moby_update::services::{HeroCall, HeroFields};
     use rc_game::scene_player::{SCENE_HIDDEN_BIT, SCENE_HIDDEN_CLASSES};
     p.svc.game_mode = 2;
-    // DialogStreamStart 0x2ac330: the scene head record 0x17c8c0 (and 0x17c7c0 / 0x17c800) cleared.
+    // DialogStreamStart 0x2ac330: the scene records 0x17c8c0, 0x17c7c0, 0x17c800, 0x17c880 and 0x17c840 cleared.
     p.svc.scene_head = None;
+    p.svc.actor_records.clear();
     p.game.camera_paused = true;
     let counter = p.game.counter;
     let call = HeroCall::SetState { id: rc_game::scene_player::HERO_SCENE_STATE, play: true };
@@ -719,6 +719,9 @@ fn enter_mode2(rt: &mut SceneRuntime, p: &mut Play) {
     // carries mode bit 1 (not drawn by the generic moby draw); classes reach it as 0x16ce58[k] (SceneActorState::moby).
     {
         use rc_game::moby_update::services::ClassData;
+        // +0x38..+0x3f: the hero moby's light word and ambient as HeroEnvLighting last left them (0x38383800000000
+        // without a hero).
+        let hero = p.game.mobys.mobys.get(p.game.hero_moby).map(|h| (h.light, h.ambient));
         for a in rt.actors.iter_mut() {
             let oc = a.o_class as i16;
             let info = p.classes.info(oc);
@@ -727,6 +730,7 @@ fn enter_mode2(rt: &mut SceneRuntime, p: &mut Play) {
                 let m = &mut p.game.mobys.mobys[id];
                 m.mode |= 6 | 1;
                 m.state = 0;
+                (m.light, m.ambient) = hero.unwrap_or((0, [0x38, 0x38, 0x38, 0]));
             } else {
                 warn!("scene: no free moby slot for actor class {oc}");
             }
@@ -753,6 +757,7 @@ fn leave_mode2(rt: &mut SceneRuntime, p: &mut Play) {
     p.svc.game_mode = if rt.pending.is_empty() { 0 } else { 2 };
     p.game.camera_paused = false;
     p.svc.cinematic.scene = None;
+    p.svc.actor_records.glow.clear();
     // FUN_002ac608: the actors deleted (their class sequence slots freed with them).
     let counter = p.game.counter;
     for a in &mut rt.actors {
@@ -800,7 +805,11 @@ fn publish_scene(rt: &SceneRuntime, player: &ScenePlayer, camera: Option<SceneCa
 /// sequence, rc_game::moby_update::scheduler::rebuild_matrix); drawn (+0x31). Runs after the gameplay tick, so this
 /// frame's moby loop still read the last frame's pose while everything after it (the actors' *ShadowProbeAlongDir*
 /// and shadow volumes, crate::shadow_render) sees the pose the actors are drawn with this frame.
-pub(crate) fn actor_mobys(rt: Res<SceneRuntime>, play: Option<ResMut<Play>>) {
+///
+/// Then each actor's class extras of the same loop (`rc_game::scene_actors`): class 0 → `FUN_0024a1d0` (Ratchet's head
+/// scale), classes 10 / 0x1a3 / 0x555 → `FUN_00228bc0` (the glow word, the antenna sprite). Their glow sprites start
+/// empty each tick, as the hero update 0x228870 empties the list 0x141200 before them.
+pub(crate) fn actor_mobys(mut rt: ResMut<SceneRuntime>, play: Option<ResMut<Play>>) {
     let Some(mut p) = play else { return };
     if rt.player.is_none() { return; }
     for a in &rt.actors {
@@ -813,6 +822,21 @@ pub(crate) fn actor_mobys(rt: Res<SceneRuntime>, play: Option<ResMut<Play>>) {
                 rc_game::moby_update::scheduler::rebuild_matrix(m, Some(&a.anim));
             }
         }
+    }
+    p.svc.actor_records.glow.clear();
+    let ids: Vec<Option<MobyId>> = rt.actors.iter().map(|a| a.moby).collect();
+    let posed: Vec<(MobyId, i32, Arc<MobyAnimClass>)> = rt.actors.iter().filter(|a| a.pose.is_some()).filter_map(|a| Some((a.moby?, a.o_class, a.anim.clone()))).collect();
+    crate::travel_render::with_world(&mut p, None, |w| {
+        for (id, class, anim) in &posed {
+            match class {
+                0 => rc_game::scene_actors::ratchet(w, *id, &ids),
+                10 | 0x1a3 | 0x555 => rc_game::scene_actors::clank(w, *id, Some(anim)),
+                _ => {}
+            }
+        }
+    });
+    for a in rt.actors.iter_mut() {
+        a.glow = a.moby.and_then(|id| p.game.mobys.mobys.get(id)).and_then(|m| (m.mode & 0x10 != 0).then(|| crate::moby_lod::glow_word(0x10, m.glow)));
     }
 }
 
@@ -833,11 +857,15 @@ fn pose_actors(rt: &mut SceneRuntime, player: &ScenePlayer, out: &SceneTick, lev
         }
         let s = AnimState { seq_a: a.slot, frame_a: pose.frame_a, seq_b: a.slot, frame_b: pose.frame_b, t: pose.t, speed: 1.0, rate: 1.0, flags: 0, trigger_count: 0, skip_advance: true };
         a.pose = Some((s, pose.position));
-        let mods = a.moby.and_then(|id| table.and_then(|t| t.mobys.get(id))).map(|m| m.joint_mods.as_slice()).unwrap_or(&[]);
+        let tm = a.moby.and_then(|id| table.and_then(|t| t.mobys.get(id)));
+        let mods = tm.map(|m| m.joint_mods.as_slice()).unwrap_or(&[]);
         let f = moby_anim::evaluate_posed(&a.anim, &s, None, &[], mods);
         let at = a.base as usize * 64;
         for (k, b) in f.iter().take(a.slots as usize).flat_map(|r| r.iter().flatten().flat_map(|v| v.to_le_bytes())).enumerate() { palette[at + k] = b; }
-        let lights = lighting.map(|l| light::moby_lights(&rows, &l.bank, rt.light_word, rt.ambient, 0x80));
+        // Its moby's +0x2c (`FUN_0024a1d0` scales some actors) and +0x38..+0x3f (the hero's, copied at its creation).
+        if let Some(m) = tm { a.scale = m.scale; }
+        let (light_word, ambient) = tm.map_or((0, [0x38; 3]), |m| (m.light, [m.ambient[0], m.ambient[1], m.ambient[2]]));
+        let lights = lighting.map(|l| light::moby_lights(&rows, &l.bank, light_word, ambient, 0x80));
         let model = moby_render::extra_model([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], a.scale, pose.position);
         records.extend_from_slice(&moby_render::extra_record(&model, lights.as_ref(), a.base));
     }
@@ -846,8 +874,19 @@ fn pose_actors(rt: &mut SceneRuntime, player: &ScenePlayer, out: &SceneTick, lev
 }
 
 /// Records, palettes, transforms and visibility of the actors after a frame.
-fn upload(mut rt: ResMut<SceneRuntime>, active: Res<ActiveScene>, mut buffers: ResMut<Assets<ShaderBuffer>>, mut q: Query<(&mut Transform, &mut Visibility), Without<Camera3d>>) {
+fn upload(mut commands: Commands, mut rt: ResMut<SceneRuntime>, active: Res<ActiveScene>, mut buffers: ResMut<Assets<ShaderBuffer>>, mut q: Query<(&mut Transform, &mut Visibility), Without<Camera3d>>) {
     let rt = &mut *rt;
+    // The glow list: an actor's +0x90 while mode 0x10 (`moby_lod::glow_word`; Clank's pulse), written when it changes.
+    if let Some(extra) = &rt.extra {
+        for (k, a) in rt.actors.iter_mut().enumerate() {
+            if a.glow == a.glow_drawn { continue; }
+            match a.glow {
+                Some(w) => extra.set_glow(&mut commands, k as u32, w),
+                None => extra.clear_glow(&mut commands, k as u32),
+            }
+            a.glow_drawn = a.glow;
+        }
+    }
     if rt.uploaded == Some(rt.frames) || rt.records.is_empty() { return; }
     rt.uploaded = Some(rt.frames);
     let Some(extra) = &rt.extra else { return };

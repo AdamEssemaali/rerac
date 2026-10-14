@@ -798,6 +798,9 @@ pub struct Services {
     /// The scene big-head record 0x17c8c0 (`manip::scene_big_head`): the actor it was attached to, None while clear
     /// (every `DialogStreamStart` clears it).
     pub scene_head: Option<crate::moby_runtime::MobyId>,
+    /// The scene actors' manipulator records 0x17c7c0 / 0x17c800 / 0x17c840 / 0x17c880 and their glow sprites
+    /// (`crate::scene_actors`).
+    pub actor_records: crate::scene_actors::ActorRecords,
     /// `0x15f638`: the level's death height (gameplay header +0x28; set by the engine at the load): Veldin's floating
     /// platforms 587 kill Ratchet riding one below it.
     pub death_z: f32,
@@ -959,6 +962,7 @@ impl Services {
             game_mode: 0,
             cheats: Default::default(),
             scene_head: None,
+            actor_records: Default::default(),
             death_z: 0.0,
             camera_classes: Vec::new(),
             camera_focus: Vec::new(),
