@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.4-alpha
+
+Fixes from playing v0.3.3.
+
+- Cutscenes: characters are lit like the place they stand in, Ratchet's head is the right size, and Clank's eyes and antenna glow.
+- Lamps, glowing mushrooms and other lights brighten Ratchet again, like in Novalis's caves, Aridia's factory and Al's shop.
+- Ratchet raises his gun when standing close to a wall, and his weapons fire along it.
+- Aiming with the wrench or the Swingshot shows the reticle.
+- The Swingshot's claws fold out once and stay open.
+- The Comet-Strike sparks when the wrench hits a wall or an enemy.
+- The Bomb Glove's blast throws enemies away from it, and the gold Bomb Glove has its bigger, golden blast.
+- Pressing Start on the Hoverboard asks to quit the race.
+- Shop messages fit inside their box.
+- Novalis: Drek's gunship destroys the bridge only once.
+- Aridia: the lifts come for Ratchet from either end, and the shark and nest counters show during the race.
+- Kerwan: Ratchet no longer falls off the taxis mid-ride.
+- Blarg Station: the pad Clank uses carries Ratchet, the airlock doors stay in step after Clank's section, and the queen's screams and death play out as they should.
+
 ## v0.3.3-alpha
 
 Fixes from playing v0.3.2.
