@@ -17,33 +17,7 @@ struct WorldLight {
 
 const NO_LIGHTS: u32 = 0xffffu;
 
-// `LightTfrags`, point pass (after the directional one, on its packed result): per listed light whose radius
-// reaches the vertex (r² − |P − L|² not negative), d = (−N)·(P − L)·(1 − dist/r)/dist, d = max(d, d·w), then
-// rgba += floor(128 · (colour, w) · d) (all four lanes: the intensity also feeds alpha), rgb clamped at 255.
-// `c0` = the vertex's baked bytes, `p` = its position, `n` = (N, 1 when the vertex has a light record).
-fn tfrag_lit(list: u32, lights: array<WorldLight, 8>, c0: vec4<f32>, p: vec3<f32>, n: vec4<f32>) -> vec4<f32> {
-    if (n.w == 0.0) { return c0; }
-    var ls = lights;
-    var c = round(c0);
-    var l = list | 0xf0000u;
-    loop {
-        let i = l & 0xfu;
-        if (i == 0xfu) { break; }
-        l = l >> 4u;
-        let light = ls[i & 7u];
-        let v = p - light.pos.xyz;
-        let d2 = dot(v, v);
-        let r = light.pos.w;
-        if (r * r - d2 < 0.0 || d2 <= 0.0) { continue; }
-        let dist = sqrt(d2);
-        var d = -dot(n.xyz, v) * ((1.0 - dist / r) / dist);
-        d = max(d, d * light.col.w);
-        let rgb = clamp(c.rgb + floor(128.0 * light.col.rgb * d), vec3<f32>(0.0), vec3<f32>(255.0));
-        let a = c.a + floor(128.0 * light.col.w * d);
-        c = vec4<f32>(rgb, a - 256.0 * floor(a / 256.0));
-    }
-    return c;
-}
+// `LightTfrags`, point pass: `tfrag_lit` in tfrag.wgsl (it reads the bank straight from its storage buffer).
 
 // The third light `LightTies` / `LightShrubs` merge from the listed lights that reach the instance's
 // bounding-sphere centre: direction = sum of the unit vectors (centre − L) (renormalised only when two or more
