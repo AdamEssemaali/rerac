@@ -24,3 +24,7 @@ rc-data = { path = "../rc-data" }
 # The movies (FMV): MPEG-2 video decoder and PSS player core, ours (docs/formats/pss.md).
 rc-video = { path = "../rc-video" }
 anyhow.workspace = true
+
+# The save clock in the host's local time (crate::saves::clock_now: `localtime_r`; Windows calls kernel32 directly).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

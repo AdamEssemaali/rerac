@@ -63,11 +63,45 @@ static TITLE_WORLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBoo
 pub fn title_world_shown() -> bool { TITLE_WORLD.load(std::sync::atomic::Ordering::Relaxed) }
 pub fn set_title_world_shown(v: bool) { TITLE_WORLD.store(v, std::sync::atomic::Ordering::Relaxed); }
 
-/// `sceCdReadClock` (BCD) now: the host's UTC time.
+/// `sceCdReadClock` (BCD) now, in the host's **local** time: the console's clock chip keeps JST and the game converts
+/// it with the system configuration's time zone and summer time (0x12d6d8), so a save shows the player's own date;
+/// the host's local time (its zone and daylight saving applied) is that. UTC only when the OS gives no local time
+/// (an evening save in the Americas would otherwise show the next day's date).
 pub fn clock_now() -> [u8; 8] {
+    if let Some([y, mo, d, h, mi, s]) = local_time() { return rc_game::memcard::bcd_clock_civil(y, mo, d, h, mi, s); }
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     rc_game::memcard::bcd_clock(t)
 }
+
+/// The host's local date and time now: year, month, day, hour, minute, second.
+#[cfg(windows)]
+fn local_time() -> Option<[u64; 6]> {
+    // `GetLocalTime` (kernel32): SYSTEMTIME = year, month, day of week, day, hour, minute, second, milliseconds.
+    #[repr(C)]
+    struct SystemTime([u16; 8]);
+    #[link(name = "kernel32")]
+    unsafe extern "system" { fn GetLocalTime(st: *mut SystemTime); }
+    let mut st = SystemTime([0; 8]);
+    // SAFETY: GetLocalTime only writes the SYSTEMTIME it is given.
+    unsafe { GetLocalTime(&mut st) };
+    let [y, mo, _, d, h, mi, s, _] = st.0;
+    (y != 0).then(|| [y as u64, mo as u64, d as u64, h as u64, mi as u64, s as u64])
+}
+
+/// The host's local date and time now: year, month, day, hour, minute, second.
+#[cfg(unix)]
+fn local_time() -> Option<[u64; 6]> {
+    // SAFETY: `time` and `localtime_r` only read / write the values they are given (the reentrant form).
+    unsafe {
+        let t = libc::time(std::ptr::null_mut());
+        let mut tm: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&t, &mut tm).is_null() { return None; }
+        Some([(tm.tm_year + 1900) as u64, (tm.tm_mon + 1) as u64, tm.tm_mday as u64, tm.tm_hour as u64, tm.tm_min as u64, tm.tm_sec as u64])
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
+fn local_time() -> Option<[u64; 6]> { None }
 
 /// The per-OS config base the port settings use (crate::render_settings).
 fn config_base() -> Option<std::path::PathBuf> {
@@ -215,3 +249,17 @@ pub fn front_end(lang: u32, rand: i32) -> rc_game::frontend::FrontEnd {
     println!("saves: front end: card check {check}, first attract movie {}", fe.attract_next);
     fe
 }
+
+#[cfg(test)]
+mod clock_tests {
+    /// The save clock is the host's local time (its date and hour), not UTC.
+    #[test]
+    fn clock_now_is_local() {
+        let Some([y, mo, d, h, ..]) = super::local_time() else { return };
+        let c = super::clock_now();
+        let bcd = |v: u64| (((v / 10) % 10) << 4 | (v % 10)) as u8;
+        println!("clock_now {c:02x?}: local {y}-{mo:02}-{d:02} {h:02}h");
+        assert_eq!((c[3], c[5], c[6], c[7]), (bcd(h), bcd(d), bcd(mo), bcd(y % 100)));
+    }
+}
+
