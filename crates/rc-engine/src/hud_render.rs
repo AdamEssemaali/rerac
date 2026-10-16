@@ -543,6 +543,8 @@ struct HudRuntime {
     cine_banner_seq: u32,
     /// The last [`HudFeed::reset`] applied.
     reset: u32,
+    /// The last [`HudFeed::empty`] applied.
+    empty: u32,
     /// The last [`HudFeed::prompt_released`] applied.
     prompt_released: u32,
     /// The last game-side HUD call applied (`rc_game::hud::Calls::since`, `Services::hud`).
@@ -601,9 +603,12 @@ pub struct HudFeed {
     pub prompt_text: Vec<u8>,
     pub bolts_pinned: bool,
     pub weapon: Option<Option<(u16, i32, i32)>>,
-    /// Bumped by `FUN_0024fb00` callers (the vendor's open) and the death reload's `fun_001fee88`: every HUD slot is
-    /// emptied at once.
+    /// Bumped by `FUN_0024fb00` callers (the vendor's open, the gold upgrade): every HUD slot is emptied at once and the
+    /// ammo counter held off until the vendor's exit (`rc_game::hud::HudState::reset_slots`).
     pub reset: u32,
+    /// Bumped by the death reload's `fun_001fee88`: every HUD slot is emptied at once, the ammo counter not held
+    /// (`rc_game::hud::HudState::empty_slots`).
+    pub empty: u32,
     /// `rc_game::moby_update::interact::Prompt::released`: the prompt's slot emptied at once on a change.
     pub prompt_released: u32,
     /// The slot calls the engine-side callers made this frame (the quick select's opening and `PageMenuClose`: health and
@@ -773,6 +778,7 @@ fn setup(
         banner_seq: 0,
         cine_banner_seq: 0,
         reset: 0,
+        empty: 0,
         prompt_released: 0,
         calls_cursor: None,
         pending: Vec::new(),
@@ -863,6 +869,10 @@ fn tick_and_build(
     if feed.reset != rt.reset {
         rt.reset = feed.reset;
         rt.state.reset_slots();
+    }
+    if feed.empty != rt.empty {
+        rt.empty = feed.empty;
+        rt.state.empty_slots();
     }
     rt.state.set_prompt(feed.prompt, &feed.prompt_text);
     if feed.prompt_released != rt.prompt_released {

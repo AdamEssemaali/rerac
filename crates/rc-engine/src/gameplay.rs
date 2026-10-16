@@ -2205,8 +2205,9 @@ fn tick(
         reload_load_pass(p, coll, particles.as_deref_mut(), state.as_deref().map(|s| s.0.global.vendor));
         if let Some(a) = audio.as_deref_mut() { a.system().death_reload(checkpoint); }
         // The main loop's `fun_001fee88` after the reload (L01 0x259c40, as at the level's first load): every HUD slot
-        // emptied and hidden at once, so an element shown at the death (the oxygen meter of a drowning) does not linger.
-        if let Some(f) = hud_feed.as_deref_mut() { f.reset = f.reset.wrapping_add(1); }
+        // emptied and hidden at once, so an element shown at the death (the oxygen meter of a drowning) does not linger;
+        // unlike the vendor's `FUN_0024fb00` it leaves the ammo counter shown (the port held it off until a vendor).
+        if let Some(f) = hud_feed.as_deref_mut() { f.empty = f.empty.wrapping_add(1); }
         println!("gameplay: death reload done: respawned at {}", if checkpoint { "the checkpoint" } else { "the uid-0 moby" });
     }
 

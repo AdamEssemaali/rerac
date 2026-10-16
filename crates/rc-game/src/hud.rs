@@ -774,17 +774,24 @@ impl HudState {
         true
     }
 
-    /// `FUN_0024fb00` → `FUN_0024af10` (`OpenVendorMenu`, the page menus): every slot emptied at once (no ramp), the
-    /// requests the elements keep re-made by their owners.
+    /// `FUN_0024fb00` → `FUN_0024af10` (`OpenVendorMenu`, the gold upgrade `0x2aea70`): every slot emptied at once
+    /// ([`HudState::empty_slots`]), then 0x15f970 = −1, 0x15f96c = 0 and the weapon show held off until
+    /// `update_resource_counter` (the vendor's exit).
     pub fn reset_slots(&mut self) {
+        self.empty_slots();
+        self.weapon_handle = None;
+        self.weapon_gate = 1;
+    }
+
+    /// The slots emptied at once (no ramp), the requests the elements keep re-made by their owners: `FUN_0024af10`, and
+    /// the death reload's `fun_001fee88` (level01 0x24a530, run by `entry` after the reload as at a level's first load),
+    /// which leaves the weapon show's gate and its handle alone: a death never hides the ammo counter.
+    pub fn empty_slots(&mut self) {
         // (+0x58 / +0x5c are not reset: the static sizes stay as the inits left them.)
         let sizes = self.slots.map(|s| s.size);
         self.slots = [Slot::default(); SLOTS];
         for (s, z) in self.slots.iter_mut().zip(sizes) { s.size = z; }
         self.giant_up = false;
-        // 0x15f970 = −1, 0x15f96c = 0, and the weapon show held off until `update_resource_counter`.
-        self.weapon_handle = None;
-        self.weapon_gate = 1;
         // `OpenVendorMenu` queues its ammo entry after the reset: the vendor's request is made again.
         (self.vendor_open, self.vendor_sel, self.vendor_handle) = (false, None, None);
         self.bolts_pin_handle = None;
@@ -2136,6 +2143,25 @@ mod tests {
         assert_eq!((h.slots[0].slide, h.slots[0].alpha), (8, 8), "flag 0x10 keeps it up");
         for _ in 0..40 { h.tick(inputs(4, 0)); }
         assert_eq!((h.slots[0].slide, h.slots[0].alpha, h.slots[0].flags), (0, 0, 0));
+    }
+
+    /// The death reload empties the slots (`fun_001fee88`) without the vendor's hold on the weapon show: the held
+    /// weapon's counter comes straight back. The vendor's reset (`FUN_0024fb00`) holds it until the vendor's exit. (The
+    /// port's death reload used the vendor's reset, so the ammo counter stayed hidden after a death until a shop.)
+    #[test]
+    fn a_death_keeps_the_ammo_counter() {
+        let mut h = HudState::new(assets());
+        let mut ammo = [0; 37];
+        ammo[10] = 25;
+        let held = Inputs { weapon: Some((10, 25, 40)), ammo, ..inputs(4, 0) };
+        for _ in 0..50 { h.tick(held); }
+        h.empty_slots();
+        assert_eq!(h.slots[0].element, Element::Empty);
+        for _ in 0..50 { h.tick(held); }
+        assert_eq!((h.slots[0].icon, h.slots[0].shown, h.slots[0].slide), (icon::ITEM_BASE + 10, 25, 8));
+        h.reset_slots();
+        for _ in 0..50 { h.tick(held); }
+        assert_eq!(h.slots[0].element, Element::Empty, "the vendor's reset holds the counter off");
     }
 
     /// The vendor's own slot-0 requests (`OpenVendorMenu` / `VendorModeUpdate` / `VendorExit`): open with the Bomb Glove
