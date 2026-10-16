@@ -44,13 +44,13 @@
 // perspective-correctly per pixel, so z is the exact per-pixel depth.
 //
 // Point lights (`LightTfrags`' point pass, crate::world_lights): when the tfrag's nibble list names any, every
-// position slot the vertex reads gets them added to its baked RGBA (world_lights::tfrag_lit) before the morph
+// position slot the vertex reads gets them added to its baked RGBA (tfrag_lit below) before the morph
 // blends, as VU1 reads the relit RGBA block. With an empty list (0xffff) nothing changes. The lists (one u32 per
 // tfrag) and the bank (8 × 8 f32 as u32 bits) follow the draw modes in `modes`; a slot's normal is packed in its
 // last word. (No bindings of their own: a changed material layout reorders draws and changes lightless frames.)
 
 #import bevy_pbr::view_transformations::{position_world_to_clip, position_world_to_view}
-#import rerac::world_lights::{WorldLight, NO_LIGHTS, tfrag_lit}
+#import rerac::world_lights::{WorldLight, NO_LIGHTS}
 
 struct TfragFog {
     // rgb = FOGCOL (display-encoded 0..1), w = 1 when fog is enabled.
@@ -116,17 +116,42 @@ fn sample_world(uv: vec2<f32>, l: f32, mxl: f32, duv: vec4<f32>) -> vec4<f32> {
 // `modes` = n draw modes, n nibble lists, then the bank.
 fn tfrag_count() -> u32 { return (arrayLength(&modes) - 64u) / 2u; }
 
-fn bank() -> array<WorldLight, 8> {
-    let b = 2u * tfrag_count();
-    var ls: array<WorldLight, 8>;
-    for (var k = 0u; k < 8u; k += 1u) {
-        let o = b + 8u * k;
-        ls[k] = WorldLight(
-            bitcast<vec4<f32>>(vec4<u32>(modes[o], modes[o + 1u], modes[o + 2u], modes[o + 3u])),
-            bitcast<vec4<f32>>(vec4<u32>(modes[o + 4u], modes[o + 5u], modes[o + 6u], modes[o + 7u])),
-        );
+// Bank slot k (0..7), read where it is needed: a copy of the whole bank per call (an 8-light local array indexed by a
+// variable) made NVIDIA's Vulkan compiler take ~90 s per tfrag pipeline on a cold driver cache (G-REN-037: own() is
+// inlined ~20 times per vertex through the LOD morphs).
+fn bank_light(k: u32) -> WorldLight {
+    let o = 2u * tfrag_count() + 8u * k;
+    return WorldLight(
+        bitcast<vec4<f32>>(vec4<u32>(modes[o], modes[o + 1u], modes[o + 2u], modes[o + 3u])),
+        bitcast<vec4<f32>>(vec4<u32>(modes[o + 4u], modes[o + 5u], modes[o + 6u], modes[o + 7u])),
+    );
+}
+
+// `LightTfrags`, point pass (crate::world_lights; after the directional one, on its packed result): per listed light
+// whose radius reaches the vertex (r² − |P − L|² not negative), d = (−N)·(P − L)·(1 − dist/r)/dist, d = max(d, d·w),
+// then rgba += floor(128 · (colour, w) · d) (all four lanes: the intensity also feeds alpha), rgb clamped at 255.
+// `c0` = the vertex's baked bytes, `p` = its position, `n` = (N, 1 when the vertex has a light record).
+fn tfrag_lit(list: u32, c0: vec4<f32>, p: vec3<f32>, n: vec4<f32>) -> vec4<f32> {
+    if (n.w == 0.0) { return c0; }
+    var c = round(c0);
+    var l = list | 0xf0000u;
+    loop {
+        let i = l & 0xfu;
+        if (i == 0xfu) { break; }
+        l = l >> 4u;
+        let light = bank_light(i & 7u);
+        let v = p - light.pos.xyz;
+        let d2 = dot(v, v);
+        let r = light.pos.w;
+        if (r * r - d2 < 0.0 || d2 <= 0.0) { continue; }
+        let dist = sqrt(d2);
+        var d = -dot(n.xyz, v) * ((1.0 - dist / r) / dist);
+        d = max(d, d * light.col.w);
+        let rgb = clamp(c.rgb + floor(128.0 * light.col.rgb * d), vec3<f32>(0.0), vec3<f32>(255.0));
+        let a = c.a + floor(128.0 * light.col.w * d);
+        c = vec4<f32>(rgb, a - 256.0 * floor(a / 256.0));
     }
-    return ls;
+    return c;
 }
 
 // N = (cos az · cos el, sin az · cos el, sin el) in game axes (256 steps per turn), in Bevy axes (x, z, −y);
@@ -178,7 +203,7 @@ fn own(s: u32) -> Vtx {
     let sl = slots[s];
     let c = unpack4x8unorm(sl.color) * 255.0;
     if (point_list == NO_LIGHTS) { return Vtx(sl.pos, c); }
-    return Vtx(sl.pos, tfrag_lit(point_list, bank(), c, sl.pos, slot_normal(sl.normal)));
+    return Vtx(sl.pos, tfrag_lit(point_list, c, sl.pos, slot_normal(sl.normal)));
 }
 
 fn blend(c: Vtx, p1: Vtx, p2: Vtx, t: vec2<f32>) -> Vtx {
