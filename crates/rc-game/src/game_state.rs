@@ -149,7 +149,8 @@ chunk_struct! {
         1 bolts: i32,
         /// 0x15ee20: times completed (challenge mode +1).
         2 completes: i32,
-        /// 0x15ee24: elapsed time, 60 Hz ticks (+180 per level load).
+        /// 0x15ee24: elapsed time, 60 Hz ticks: +1 per frame of the main loop in every mode (`FUN_00226e08`;
+        /// rc-engine `gameplay::elapsed_frame`), +180 per level load.
         3 elapsed: i32,
         /// 0x15ee98: last-save `sceCdCLOCK` (BCD).
         4 save_clock: [u8; 8],
