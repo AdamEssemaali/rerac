@@ -163,6 +163,22 @@ fn list_of(m: &PageMenu, w: u32) -> &List {
     }
 }
 
+/// `SceneController`'s head sets 0x15f5ac on the root page (kind 2), so the save's elapsed time does not count those
+/// frames; the opening transition (kind 1) and the Options page (kind 8) count.
+#[test]
+fn the_root_page_holds_the_elapsed_time() {
+    let (mut m, mut g) = (menu(), gs());
+    let o = open(&mut m, &mut g, 0);
+    assert!(o.iter().all(|o| !o.elapsed_hold), "the opening transition counts");
+    assert_eq!(m.kind, 2);
+    assert!(m.tick(&NONE, &mut g, &MenuEnv::default()).elapsed_hold);
+    m.pages.get_mut(&page::ROOT).unwrap().focus = ROOT_W[5];
+    m.tick(&press(button::CROSS), &mut g, &MenuEnv::default());
+    for _ in 0..13 { m.tick(&NONE, &mut g, &MenuEnv::default()); }
+    assert_eq!(m.kind, 8);
+    assert!(!m.tick(&NONE, &mut g, &MenuEnv::default()).elapsed_hold);
+}
+
 #[test]
 fn open_transition_is_12_raw_ticks_with_the_seqs_reversed() {
     let (mut m, mut g) = (menu(), gs());

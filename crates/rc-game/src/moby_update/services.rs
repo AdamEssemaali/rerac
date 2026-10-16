@@ -801,6 +801,9 @@ pub struct Services {
     /// The scene actors' manipulator records 0x17c7c0 / 0x17c800 / 0x17c840 / 0x17c880 and their glow sprites
     /// (`crate::scene_actors`).
     pub actor_records: crate::scene_actors::ActorRecords,
+    /// 0x15f5ac: the page menu's frame holds the elapsed time 0x15ee24 (rc-engine `gameplay::elapsed_frame` reads and
+    /// clears it).
+    pub elapsed_hold: bool,
     /// `0x15f638`: the level's death height (gameplay header +0x28; set by the engine at the load): Veldin's floating
     /// platforms 587 kill Ratchet riding one below it.
     pub death_z: f32,
@@ -963,6 +966,7 @@ impl Services {
             cheats: Default::default(),
             scene_head: None,
             actor_records: Default::default(),
+            elapsed_hold: false,
             death_z: 0.0,
             camera_classes: Vec::new(),
             camera_focus: Vec::new(),

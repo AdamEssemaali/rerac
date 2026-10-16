@@ -734,6 +734,7 @@ fn menu_frame(
                 // 0x15172a as the widgets read it (the Helpdesk girl).
                 menu.media.voice_state = play.svc.help.voice.state;
                 let out = menu.tick(&inp, gs, &env);
+                if out.elapsed_hold { play.svc.elapsed_hold = true; }
                 if let (Some(v), Some(s)) = (menu.port_value(Setting::Shadows), shadows.as_mut()) {
                     if s.enabled != (v == 0) {
                         s.enabled = v == 0;
@@ -1382,6 +1383,7 @@ fn front_end_frame(
                 saves_in(menu, play);
                 menu.saves.card.front_end = true;
                 let o = menu.tick(&inp, gs, &env);
+                if o.elapsed_hold { play.svc.elapsed_hold = true; }
                 if let Some(a) = audio.as_deref_mut() {
                     play_menu_sounds(play, a, &o.sounds);
                     menu_sound_frame(play, a);

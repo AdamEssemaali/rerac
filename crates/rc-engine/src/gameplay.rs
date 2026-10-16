@@ -273,7 +273,7 @@ impl Plugin for GameplayPlugin {
                 (setup, input_map::sample_system, set_budget, keys).chain().after(bevy::input::InputSystems),
             )
             .add_systems(FixedUpdate, tick.in_set(GameTick).before(crate::particle_render::tick))
-            .add_systems(FixedUpdate, elapsed_frame.before(GameTick))
+            .add_systems(FixedUpdate, elapsed_frame.after(GameTick).after(crate::menu_render::MenuFrameSet))
             .add_systems(Update, (show_reloaded, debug_dump, respawn_probe))
             .add_systems(PostUpdate, ratchet_visibility.before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate))
             .add_systems(RunFixedMainLoop, play_camera::apply.in_set(RunFixedMainLoopSystems::AfterFixedMainLoop))
@@ -307,11 +307,16 @@ pub struct GameTick;
 #[derive(Resource)]
 pub struct Persistent(pub GameState);
 
-/// `FUN_00226e08`, called by every frame of the main loop (0x2326b4 / 0x232708 / 0x232748) whatever the mode (the
-/// pause menu and the other menus too, unlike the play time 0x15eea4 of the tick): the elapsed time 0x15ee24 + 1 per
-/// 60 Hz frame (unless 0x15f5ec, which nothing in the ELF sets; the PAL +10 per 50 frames does not apply, NTSC only).
-/// The save slots show it as `hh:mm` (rc_game::menus::pause::saves); without it they stayed at 00:00 (GitHub #8).
-fn elapsed_frame(state: Option<ResMut<Persistent>>) {
+/// `FUN_00226e08` (level01 0x29aa10), called at the end of every frame of the main loop (`entry` 0x259c40; boot
+/// 0x2326b4 / 0x232708 / 0x232748) whatever the mode (unlike the play time 0x15eea4 of the tick): the elapsed time
+/// 0x15ee24 + 1 per 60 Hz frame, unless 0x15f5ac is set: `SceneController` 0x28c990 sets it on the page menu's frames
+/// of kinds 2 (the pause menu's root page) / 0x1a / 0x1e / 0x1f, and the menu modes' frame path clears it after the
+/// call, so those frames do not count (the PAL +10 per 50 frames does not apply, NTSC only). After the menu frame, so
+/// it sees that frame's flag. The save slots show it as `hh:mm` (rc_game::menus::pause::saves); without it they
+/// stayed at 00:00 (GitHub #8).
+fn elapsed_frame(state: Option<ResMut<Persistent>>, play: Option<ResMut<Play>>) {
+    let hold = play.is_some_and(|mut p| std::mem::take(&mut p.svc.elapsed_hold));
+    if hold { return; }
     if let Some(mut s) = state { s.0.global.elapsed = s.0.global.elapsed.wrapping_add(1); }
 }
 

@@ -433,6 +433,9 @@ pub struct MenuOut {
     pub drone: bool,
     /// The transition started / finished this frame.
     pub transition: Option<(u32, u32)>,
+    /// `0x15f5ac = 1` (`SceneController` 0x28c990's head, kinds 2 / 0x1a / 0x1e / 0x1f): the elapsed time 0x15ee24 does
+    /// not count this frame (rc-engine `gameplay::elapsed_frame`).
+    pub elapsed_hold: bool,
     pub entered: Option<u32>,
     /// `MenuInput` 0x298f80 recognised a code this frame: its effect (applied to the game state) and what is left for
     /// the engine (the banner, the skill point jingle).
@@ -707,6 +710,7 @@ impl PageMenu {
         let mut out = MenuOut::default();
         self.enter_b13f4 = env.b13f4;
         self.ticks += 1;
+        out.elapsed_hold = matches!(self.kind, 2 | 0x1a | 0x1e | 0x1f);
         if self.kind == 0x14 {
             let before = self.trans;
             self.trans -= 1;
