@@ -273,6 +273,7 @@ impl Plugin for GameplayPlugin {
                 (setup, input_map::sample_system, set_budget, keys).chain().after(bevy::input::InputSystems),
             )
             .add_systems(FixedUpdate, tick.in_set(GameTick).before(crate::particle_render::tick))
+            .add_systems(FixedUpdate, elapsed_frame.before(GameTick))
             .add_systems(Update, (show_reloaded, debug_dump, respawn_probe))
             .add_systems(PostUpdate, ratchet_visibility.before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate))
             .add_systems(RunFixedMainLoop, play_camera::apply.in_set(RunFixedMainLoopSystems::AfterFixedMainLoop))
@@ -305,6 +306,14 @@ pub struct GameTick;
 /// The persistent game state (what the memory card saves), `rc_game::game_state`.
 #[derive(Resource)]
 pub struct Persistent(pub GameState);
+
+/// `FUN_00226e08`, called by every frame of the main loop (0x2326b4 / 0x232708 / 0x232748) whatever the mode (the
+/// pause menu and the other menus too, unlike the play time 0x15eea4 of the tick): the elapsed time 0x15ee24 + 1 per
+/// 60 Hz frame (unless 0x15f5ec, which nothing in the ELF sets; the PAL +10 per 50 frames does not apply, NTSC only).
+/// The save slots show it as `hh:mm` (rc_game::menus::pause::saves); without it they stayed at 00:00 (GitHub #8).
+fn elapsed_frame(state: Option<ResMut<Persistent>>) {
+    if let Some(mut s) = state { s.0.global.elapsed = s.0.global.elapsed.wrapping_add(1); }
+}
 
 /// The session-only state (hero HP, temporary items, Clank hidden, tick scale).
 #[derive(Resource)]

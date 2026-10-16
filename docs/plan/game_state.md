@@ -26,7 +26,7 @@ gp = 0x166c00 (`gp−0x7e7c` = 0x15ed84). Confidence: **H** read directly from c
 | 0 | 0x15ed84 | 4 | current level index (s32) | 0 (template −1) | H |
 | 1 | 0x15ed98 | 4 | bolts (s32) | 0 | H |
 | 2 | 0x15ee20 | 4 | times completed / challenge-mode count (NG+ does +1) | 0 | H |
-| 3 | 0x15ee24 | 4 | elapsed time, 60 Hz ticks (PAL adds 10 per 50 frames, `0x226e08`; +180 per level load) | 0 | H |
+| 3 | 0x15ee24 | 4 | elapsed time, 60 Hz ticks: +1 per main-loop frame in every mode (`FUN_00226e08`, called at 0x2326b4 / 0x232708 / 0x232748; skipped while 0x15f5ec ≠ 0, never set in the ELF), PAL adds 10 more per 50 frames; +180 per level load. The save slots show it as `hh:mm` | 0 | H |
 | 4 | 0x15ee98 | 8 | last-save time, `sceCdCLOCK` (BCD) from `sceCdReadClock` + local-time fix | 0 | H |
 | 5 | 0x13d388 | 128 | global flags u8[128]: [4] premium nanotech, [5] ultra nanotech, [8] Veldin Clank dialog done (§4), others per level scripts | 0 | H [4,5,8] / L rest |
 | 7 | 0x15edb0 | 12 | cheats active u8[12]; [4] 0x15edb4 = mirror (pad/rotation), [5] 0x15edb5 = mirrored anim swap | 0 | M |
