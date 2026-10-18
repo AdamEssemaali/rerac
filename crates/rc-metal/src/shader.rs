@@ -35,7 +35,7 @@ const ENGINE: &[(&str, &str)] = sources!("../../rc-engine/assets/shaders/":
 
 /// rc-metal's stand-ins for the Bevy shader modules (and its own shaders).
 const SHIMS: &[(&str, &str)] = sources!("../shaders/shim/":
-    "forward_io", "fullscreen_vertex_shader", "mesh_functions", "mesh_view_bindings", "ui_vertex_output",
+    "forward_io", "fullscreen_vertex_shader", "mesh_functions", "mesh_view_bindings", "sprite", "standard_unlit", "ui_vertex_output",
     "view_transformations",
 );
 

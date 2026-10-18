@@ -12,12 +12,17 @@
 //! `RC_SCREENSHOT=<file.png>` renders one frame offscreen without opening a window (`RC_SCREENSHOT_SIZE=WxH`, default
 //! 1024x768), writes it and exits.
 
+#[macro_use]
+mod log;
 #[cfg(target_os = "macos")]
 mod app;
 mod camera;
 mod engine;
+mod display_blend;
+mod gs_state;
 #[cfg(target_os = "macos")]
 mod render;
+mod prelude;
 #[cfg(target_os = "macos")]
 mod gpu;
 mod level;
