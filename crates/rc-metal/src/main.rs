@@ -153,6 +153,8 @@ fn main() -> anyhow::Result<()> {
     graphics::plugin(&mut app);
     render_settings::plugin(&mut app, &r.gfx.device);
     r.add_material::<tfrag_render::TfragMaterial>(&mut app.ctx);
+    // Bevy's DefaultPlugins register StandardMaterial (crate::moby_attach's rope uses it).
+    r.add_material::<StandardMaterial>(&mut app.ctx);
     fly_cam::plugin(&mut app);
     game_camera::plugin(&mut app, level.fog);
     occlusion::plugin(&mut app, r);

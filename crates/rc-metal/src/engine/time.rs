@@ -40,17 +40,22 @@ pub struct Time {
     pub fixed_timestep: Duration,
     /// Fixed steps this frame (`TimeUpdateStrategy::FixedTimesteps(n)`).
     pub steps: u32,
+    /// The clocks have been updated once (Bevy's first update has no previous instant: zero delta, no fixed step).
+    started: bool,
 }
 
 impl Default for Time {
     fn default() -> Self {
-        Time { real: Clock::default(), virt: Clock::default(), fixed: Clock::default(), default: Clock::default(), fixed_timestep: STEP, steps: 1 }
+        Time { real: Clock::default(), virt: Clock::default(), fixed: Clock::default(), default: Clock::default(), fixed_timestep: STEP, steps: 1, started: false }
     }
 }
 
 impl Time {
-    /// Bevy's `time_system` under `FixedTimesteps(n)`.
+    /// Bevy's `time_system` under `FixedTimesteps(n)`. The first update only records its instant (`Time<Real>`'s
+    /// `update_with_instant` without a last update): every clock's delta is zero and the fixed loop does not run.
     pub fn begin_frame(&mut self, n: u32) {
+        let n = if self.started { n } else { 0 };
+        self.started = true;
         self.steps = n;
         let d = STEP * n;
         self.real.advance(d);
