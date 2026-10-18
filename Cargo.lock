@@ -4453,8 +4453,10 @@ name = "rc-metal"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "gilrs",
  "glam",
  "hecs",
+ "libc",
  "naga",
  "objc2 0.6.4",
  "objc2-core-foundation",
@@ -4466,6 +4468,9 @@ dependencies = [
  "raw-window-metal",
  "rc-data",
  "rc-formats",
+ "rc-game",
+ "rc-video",
+ "rodio",
  "winit",
 ]
 

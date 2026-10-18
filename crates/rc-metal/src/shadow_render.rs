@@ -34,7 +34,7 @@ use crate::tfrag_render::game_to_bevy;
 use crate::prelude::*;
 use crate::render::gfx::{self, Binding, PipelineKey, TopologyClass};
 use objc2::rc::Retained;
-use objc2_metal::{
+use objc2_metal::{MTLCullMode, MTLWinding, 
     MTLClearColor, MTLColorWriteMask, MTLCommandBuffer, MTLCommandEncoder, MTLLoadAction, MTLPixelFormat, MTLPrimitiveType,
     MTLRenderCommandEncoder, MTLRenderPassDescriptor, MTLStoreAction, MTLTexture, MTLViewport,
 };
@@ -420,6 +420,9 @@ pub fn shadow_hook(hc: &mut HookCtx) -> anyhow::Result<()> {
         enc.setViewport(viewport);
         enc.setRenderPipelineState(&vol_pipe.state);
         enc.setDepthStencilState(Some(&depth_state));
+        // wgpu's front face (counter-clockwise; Metal's default is clockwise): `front_facing` counts +1 on the outside.
+        enc.setFrontFacingWinding(MTLWinding::CounterClockwise);
+        enc.setCullMode(MTLCullMode::None);
         gfx::bind(&enc, &vol_pipe.vertex, true, &[(0, 0, &view)]);
         // SAFETY: the frame's triangles, three float3 per triangle.
         unsafe {
