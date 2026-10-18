@@ -194,7 +194,7 @@ fn stack(world: &World, camera: Entity, default_camera: bool, target: Vec2) -> V
         .filter(|&e| gz(e).is_some() || world.get::<&ChildOf>(e).map_or(true, |p| !is_node(p.0)))
         .filter(|&e| match target_of(e) { Some(c) => c == camera, None => default_camera })
         .collect();
-    roots.sort_by_key(|&e| (gz(e).unwrap_or(0), z(e), e.to_bits()));
+    roots.sort_by_key(|&e| (gz(e).unwrap_or(0), z(e), crate::engine::ecs::bevy_order(e)));
     // Rectangles, parents before children.
     let mut rects: HashMap<Entity, Vec4> = HashMap::new();
     fn place(world: &World, e: Entity, parent: Vec4, rects: &mut HashMap<Entity, Vec4>, children: &HashMap<Entity, Vec<Entity>>) {
@@ -217,7 +217,7 @@ fn stack(world: &World, camera: Entity, default_camera: bool, target: Vec2) -> V
     fn visit(world: &World, e: Entity, out: &mut Vec<(Entity, Vec4)>, rects: &HashMap<Entity, Vec4>, children: &HashMap<Entity, Vec<Entity>>, z: &dyn Fn(Entity) -> i32, gz: &dyn Fn(Entity) -> Option<i32>) {
         if let Some(r) = rects.get(&e) { out.push((e, *r)); }
         let mut cs: Vec<Entity> = children.get(&e).cloned().unwrap_or_default().into_iter().filter(|&c| gz(c).is_none()).collect();
-        cs.sort_by_key(|&c| (z(c), c.to_bits()));
+        cs.sort_by_key(|&c| (z(c), crate::engine::ecs::bevy_order(c)));
         for c in cs { visit(world, c, out, rects, children, z, gz); }
     }
     for r in roots { visit(world, r, &mut out, &rects, &children, &z, &gz); }

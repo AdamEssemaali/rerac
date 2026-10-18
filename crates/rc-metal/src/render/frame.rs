@@ -21,7 +21,7 @@
 use super::gfx::{self, bind, Binding, CommandBuffer, Encoder, Gfx, PipelineKey, Texture, TopologyClass};
 use super::material::{AlphaMode, BindGroup, CachedPipeline, Face, Material, MeshMaterial2d, MeshMaterial3d, MeshTag, Phase, PipelineDesc, Std140};
 use crate::engine::assets::{AssetId, Assets, Handle};
-use crate::engine::ecs::{Ctx, Entity, World};
+use crate::engine::ecs::{bevy_order, Ctx, Entity, World};
 use crate::engine::image::{Image, TextureFormat};
 use crate::engine::mesh::{Mesh, Mesh2d, Mesh3d};
 use crate::engine::scene::*;
@@ -542,7 +542,7 @@ impl Renderer {
             .filter(|(_, c)| c.is_active)
             .map(|(e, c)| (c.order, e))
             .collect();
-        cams.sort_by_key(|(o, e)| (*o, e.to_bits()));
+        cams.sort_by_key(|(o, e)| (*o, bevy_order(*e)));
 
         let cb = self.gfx.queue.commandBuffer().context("Metal command buffer")?;
         let mut used_buffers = 0;
@@ -680,11 +680,11 @@ impl Renderer {
             // Phases.
             let mut opaque: Vec<&Item> = items.iter().filter(|i| i.phase == Phase::Opaque).collect();
             let mut mask: Vec<&Item> = items.iter().filter(|i| i.phase == Phase::AlphaMask).collect();
-            let bin = |i: &&Item| (i.pipeline.serial, i.material, i.mesh, i.entity.to_bits());
+            let bin = |i: &&Item| (i.pipeline.serial, i.material, i.mesh, bevy_order(i.entity));
             opaque.sort_by_key(bin);
             mask.sort_by_key(bin);
             let mut transparent: Vec<&Item> = items.iter().filter(|i| i.phase == Phase::Transparent).collect();
-            transparent.sort_by(|a, b| a.distance.total_cmp(&b.distance).then_with(|| a.entity.to_bits().cmp(&b.entity.to_bits())));
+            transparent.sort_by(|a, b| a.distance.total_cmp(&b.distance).then_with(|| bevy_order(a.entity).cmp(&bevy_order(b.entity))));
             // pre_shadow: the tagged items first in the game's order (stable for the rest), then split off.
             let mut pre: Vec<&Item> = transparent.iter().copied().filter(|i| i.before_shadows.is_some()).collect();
             pre.sort_by_key(|i| i.before_shadows.unwrap());
@@ -740,6 +740,13 @@ impl Renderer {
             self.draw_items(&enc, &view_bytes, &inst_buf, main_b.iter().copied());
             enc.endEncoding();
 
+            // `RC_METAL_ITEMS=<frame>`: the view's transparent items of that frame (diagnostics).
+            if std::env::var("RC_METAL_ITEMS").ok().and_then(|v| v.parse::<u64>().ok()) == ctx.try_res::<crate::determinism::FrameNumber>().map(|f| f.0) {
+                for (k, it) in rest.iter().enumerate() {
+                    let name = ctx.world.get::<&Name>(it.entity).map(|n| n.0.clone()).unwrap_or_default();
+                    println!("ITEM {k} cam {cam:?} effect {} dist {:.3} ent {} pipe {} {name}", it.effect, it.distance, it.entity.to_bits(), it.pipeline.serial);
+                }
+            }
             if !effects.is_empty() {
                 self.effect_pass(cb, &target_tex, &depth_tex, samples, format, viewport, &view_bytes, &inst_buf, &effects)?;
             }
@@ -749,7 +756,7 @@ impl Renderer {
             let mut instances = Vec::new();
             let serial = &mut self.serial;
             for (_, k) in &mut self.kinds2d { k.collect(ctx, &mut self.gfx, &view_info, serial, &mut items, &mut instances); }
-            items.sort_by(|a, b| a.z.total_cmp(&b.z).then_with(|| a.entity.to_bits().cmp(&b.entity.to_bits())));
+            items.sort_by(|a, b| a.z.total_cmp(&b.z).then_with(|| bevy_order(a.entity).cmp(&bevy_order(b.entity))));
             let inst_buf = self.buffer_for(used, &instances)?;
             let rpd = MTLRenderPassDescriptor::renderPassDescriptor();
             color_pass(&rpd, Some(clear));

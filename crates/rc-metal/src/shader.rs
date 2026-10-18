@@ -294,15 +294,16 @@ pub fn compile(wgsl: &str, label: &str) -> Result<Compiled> {
     let sizes_slot = (!sized.is_empty()).then_some(nb);
     let ep_res = msl::EntryPointResources { resources: map, immediates_buffer: None, sizes_buffer: sizes_slot };
     let options = msl::Options {
-        lang_version: (2, 4),
+        // wgpu-hal's choice on this hardware (MSL 3.2), so the same MSL comes out.
+        lang_version: (3, 2),
         per_entry_point_map: module.entry_points.iter().map(|e| (e.name.clone(), ep_res.clone())).collect(),
         fake_missing_bindings: false,
-        // The WGSL relies on WebGPU's bounds rules no more than wgpu's Metal backend gives it (which restricts too).
+        // wgpu-hal's policies for a module with bounds checks on (wgpu's default).
         bounds_check_policies: naga::proc::BoundsCheckPolicies {
             index: naga::proc::BoundsCheckPolicy::Restrict,
             buffer: naga::proc::BoundsCheckPolicy::Restrict,
-            image_load: naga::proc::BoundsCheckPolicy::ReadZeroSkipWrite,
-            binding_array: naga::proc::BoundsCheckPolicy::Restrict,
+            image_load: naga::proc::BoundsCheckPolicy::Restrict,
+            binding_array: naga::proc::BoundsCheckPolicy::Unchecked,
         },
         ..Default::default()
     };

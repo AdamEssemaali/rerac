@@ -14,6 +14,15 @@ use std::collections::HashMap;
 
 pub use hecs::{Entity, World};
 
+/// Bevy's `Entity` order (rc-engine breaks equal sort keys by entity: the transparent phase, the binned phases, the UI
+/// stack): generation first, then the index **descending**, because Bevy 0.19 stores the index as a `NonMaxU32` whose
+/// bits are `!index` and compares entities by their bits. hecs allocates like Bevy (a freed index is reused last-in
+/// first-out with the next generation), so the same spawn sequence gives the same order.
+pub fn bevy_order(e: Entity) -> (u32, u32) {
+    let bits = e.to_bits().get();
+    ((bits >> 32) as u32, !(bits as u32))
+}
+
 /// Resources by type.
 #[derive(Default)]
 pub struct Resources {

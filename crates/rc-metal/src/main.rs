@@ -326,31 +326,21 @@ fn schedule(app: &mut App) {
         ]);
     }
 
+    // First, PreUpdate, FixedUpdate, AfterFixedMainLoop, Update, PostUpdate: rc-engine's executable order (Bevy's
+    // topological sort of its schedules, dumped from a frame-exact Novalis run; systems absent there placed by their
+    // constraints). Where Bevy's order satisfies no constraint between two systems it is still the order the conflicting
+    // ones ran in.
     add(Stage::First, &[
         ("frame_pace::steps", frame_pace::steps),
         ("determinism::pattern_steps", determinism::pattern_steps),
+        ("display::sync_frame", display::sync_frame),
         ("time", engine::app::time_system),
         ("determinism::advance_ticks", determinism::advance_ticks),
-        ("display::sync_frame", display::sync_frame),
         ("visibomb_view::short_far", visibomb_view::short_far),
     ]);
     if play { add(Stage::First, &[("menu_render::clear_snapshot_request", menu_render::clear_snapshot_request)]); }
 
-    // `determinism::no_live_input` (rc-engine: unordered against the pad sampling) clears the live input first.
-    add(Stage::PreUpdate, &[("determinism::no_live_input", determinism::no_live_input)]);
-    if play {
-        add(Stage::PreUpdate, &[
-            ("gameplay::setup", gameplay::setup),
-            ("input_map::sample_system", input_map::sample_system),
-            ("gameplay::set_budget", gameplay::set_budget),
-            ("gameplay::keys", gameplay::keys),
-        ]);
-    }
-    add(Stage::PreUpdate, &[
-        ("graphics::apply_detail", graphics::apply_detail),
-        ("graphics::apply_samples", graphics::apply_samples),
-        ("moby_attach::setup", moby_attach::setup),
-    ]);
+    add(Stage::PreUpdate, &[("graphics::apply_detail", graphics::apply_detail)]);
     if play {
         add(Stage::PreUpdate, &[
             ("menu_render::setup", menu_render::setup),
@@ -358,87 +348,103 @@ fn schedule(app: &mut App) {
             ("menu_models::setup", menu_models::setup),
         ]);
     }
+    add(Stage::PreUpdate, &[
+        ("graphics::apply_samples", graphics::apply_samples),
+        ("moby_attach::setup", moby_attach::setup),
+    ]);
+    if play { add(Stage::PreUpdate, &[("gameplay::setup", gameplay::setup)]); }
+    add(Stage::PreUpdate, &[("determinism::no_live_input", determinism::no_live_input)]);
+    if play {
+        add(Stage::PreUpdate, &[
+            ("input_map::sample_system", input_map::sample_system),
+            ("gameplay::set_budget", gameplay::set_budget),
+            ("gameplay::keys", gameplay::keys),
+        ]);
+    }
 
     let mut fixed: Vec<(&'static str, SystemFn)> = vec![
         ("audio_out::sync_underwater", audio_out::sync_underwater),
         ("audio_out::sync_options", audio_out::sync_options),
+        ("movie_render::movie_exit", movie_render::movie_exit),
     ];
-    if play { fixed.push(("menu_render::return_page_reopen", menu_render::return_page_reopen)); }
+    if water { fixed.push(("water_render::tick", water_render::tick)); }
     fixed.extend_from_slice(&[
         ("scene_render::fade_step", scene_render::fade_step),
-        ("movie_render::movie_exit", movie_render::movie_exit),
         ("scene_render::scene_frame", scene_render::scene_frame),
     ]);
     if play {
-        fixed.push(("travel_render::pre_tick", travel_render::pre_tick));
-        fixed.push(("gameplay::tick (GameTick)", game_tick));
+        fixed.extend_from_slice(&[
+            ("menu_render::return_page_reopen", menu_render::return_page_reopen),
+            ("travel_render::pre_tick", travel_render::pre_tick),
+            ("gameplay::tick (GameTick)", game_tick),
+        ]);
     }
-    // `moby_anim::tick` (rc-engine: unordered against the game tick; both write MobyAnim): after it.
-    fixed.push(("moby_anim::tick", moby_anim::tick));
-    if water { fixed.push(("water_render::tick", water_render::tick)); }
     fixed.extend_from_slice(&[
-        ("particle_render::tick", particle_render::tick),
         ("scene_render::fade_take", scene_render::fade_take),
-        ("scene_render::actor_mobys", scene_render::actor_mobys),
+        ("fog_state::hero_env_lighting", fog_state::hero_env_lighting),
         ("movie_render::movie_frame", movie_render::movie_frame),
         ("audio_out::scene_sound", audio_out::scene_sound),
-        ("fog_state::hero_env_lighting", fog_state::hero_env_lighting),
+        ("scene_render::actor_mobys", scene_render::actor_mobys),
+        ("particle_render::tick", particle_render::tick),
+        ("sky_stars::star_frame", sky_stars::star_frame),
     ]);
-    if play { fixed.push(("shadow_render::shadow_tick", shadow_render::shadow_tick)); }
-    fixed.push(("sky_stars::star_frame", sky_stars::star_frame));
     if play {
         fixed.extend_from_slice(&[
             ("travel_render::post_tick", travel_render::post_tick),
             ("menu_render::menu_frame", menu_render::menu_frame),
-            ("saves::card_frame", saves::card_frame),
-            ("menu_render::map_trace", menu_render::map_trace),
-            ("gameplay::elapsed_frame", gameplay::elapsed_frame),
             ("title_world::tick", title_world::tick),
+            ("gameplay::elapsed_frame", gameplay::elapsed_frame),
+            ("menu_render::map_trace", menu_render::map_trace),
+            ("shadow_render::shadow_tick", shadow_render::shadow_tick),
+            ("saves::card_frame", saves::card_frame),
         ]);
     }
+    // `moby_anim::tick`: last (rc-engine: unordered against the game tick; both write MobyAnim).
+    fixed.push(("moby_anim::tick", moby_anim::tick));
     add(Stage::FixedUpdate, &fixed);
     add(Stage::FixedPostUpdate, &[("moby_attach::update", moby_attach::update)]);
-    // `hold_camera` and `apply_camera` (rc-engine: both after play_camera::apply, unordered): in that order.
     if play { add(Stage::AfterFixedMainLoop, &[("play_camera::apply", play_camera::apply)]); }
-    add(Stage::AfterFixedMainLoop, &[("scene_render::hold_camera", scene_render::hold_camera), ("scene_render::apply_camera", scene_render::apply_camera)]);
+    add(Stage::AfterFixedMainLoop, &[("scene_render::apply_camera", scene_render::apply_camera), ("scene_render::hold_camera", scene_render::hold_camera)]);
 
+    add(Stage::Update, &[
+        ("sky_render::stop_clearing", sky_render::stop_clearing),
+        ("sky_render::animate_shells", sky_render::animate_shells),
+        ("title_world::spawn", title_world::spawn),
+        ("shrub_render::cull_system", shrub_render::cull_system),
+        ("scene_render::subtitle_layer", scene_render::subtitle_layer),
+        ("shadow_render::tag_camera", shadow_render::tag_camera),
+        ("visibomb_view::sky", visibomb_view::sky),
+        ("game_camera::print_game_camera", game_camera::print_game_camera),
+        ("fly_cam::grab_cursor", fly_cam::grab_cursor),
+        ("fly_cam::fly_cam", fly_cam::fly_cam),
+        ("fog_state::camera_path", fog_state::camera_path),
+        ("determinism::dump_frame", determinism::dump_frame),
+        ("determinism::frame_screenshot", determinism::frame_screenshot),
+        ("main::take_screenshot", take_screenshot),
+        ("main::report_fps", report_fps),
+        ("render_settings::msaa_switch", render_settings::msaa_switch),
+    ]);
+    if play { add(Stage::Update, &[("gameplay::respawn_probe", gameplay::respawn_probe)]); }
     add(Stage::Update, &[
         ("display::toggle_fullscreen", display::toggle_fullscreen),
         ("display::apply_mode", display::apply_mode),
         ("display::fit_present", display::fit_present),
-        ("fly_cam::grab_cursor", fly_cam::grab_cursor),
-        ("fly_cam::fly_cam", fly_cam::fly_cam),
-        ("game_camera::print_game_camera", game_camera::print_game_camera),
-        ("shadow_render::tag_camera", shadow_render::tag_camera),
-        ("shrub_render::cull_system", shrub_render::cull_system),
-        ("sky_render::animate_shells", sky_render::animate_shells),
-        ("sky_render::stop_clearing", sky_render::stop_clearing),
-        ("fog_state::camera_path", fog_state::camera_path),
-        ("visibomb_view::sky", visibomb_view::sky),
-        ("movie_render::target_main_camera", movie_render::target_main_camera),
+    ]);
+    if play { add(Stage::Update, &[("gameplay::debug_dump", gameplay::debug_dump)]); }
+    add(Stage::Update, &[
         ("flight_render::audio_requests", flight_render::audio_requests),
-        ("title_world::spawn", title_world::spawn),
-        ("main::report_fps", report_fps),
-        ("render_settings::msaa_switch", render_settings::msaa_switch),
-        ("determinism::dump_frame", determinism::dump_frame),
-        ("determinism::frame_screenshot", determinism::frame_screenshot),
-        ("main::take_screenshot", take_screenshot),
+        ("movie_render::target_main_camera", movie_render::target_main_camera),
     ]);
     if play {
         add(Stage::Update, &[
             ("gameplay::show_reloaded", gameplay::show_reloaded),
-            ("gameplay::debug_dump", gameplay::debug_dump),
-            ("gameplay::respawn_probe", gameplay::respawn_probe),
             ("menu_render::target_main_camera", menu_render::target_main_camera),
             ("menu_render::build_prims", menu_render::build_prims),
             ("vendor_render::draw", vendor_render::draw),
-            ("travel_render::hud_layer", travel_render::hud_layer),
         ]);
     }
-    add(Stage::Update, &[
-        ("visibomb_view::statics", visibomb_view::statics),
-        ("scene_render::subtitle_layer", scene_render::subtitle_layer),
-    ]);
+    add(Stage::Update, &[("visibomb_view::statics", visibomb_view::statics)]);
+    if play { add(Stage::Update, &[("travel_render::hud_layer", travel_render::hud_layer)]); }
     if hud {
         add(Stage::Update, &[
             ("hud_render::target_main_camera", hud_render::target_main_camera),
@@ -449,74 +455,80 @@ fn schedule(app: &mut App) {
 
     let mut post: Vec<(&'static str, SystemFn)> = vec![("display::redirect", display::redirect)];
     if play { post.push(("menu_models::update", menu_models::update)); }
-    post.push(("screen_canvas::apply", screen_canvas::apply));
-    if play { post.push(("menu_render::menu_layer", menu_render::menu_layer)); }
+    post.push(("shrub_render::update_sway", shrub_render::update_sway));
+    if water { post.push(("water_render::draw", water_render::draw)); }
+    post.extend_from_slice(&[
+        ("display::box_views", display::box_views),
+        ("sky_stars::build_meshes", sky_stars::build_meshes),
+    ]);
+    if play { post.push(("gameplay::upload", gameplay::upload)); }
+    post.extend_from_slice(&[
+        ("tesla_render::draw", tesla_render::draw),
+        ("travel_render::view_layers", travel_render::view_layers),
+        ("moby_attach::upload", moby_attach::upload),
+        ("aa_blit::follow_option", aa_blit::follow_option),
+        ("pre_shadow::tag tfrag", pre_shadow::tag::<tfrag_render::TfragMaterial>),
+        ("game_camera::upload_fog", game_camera::upload_fog),
+        ("pre_shadow::tag tie", pre_shadow::tag::<tie_render::TieMaterial>),
+        ("render_settings::apply", render_settings::apply),
+    ]);
+    if water { post.push(("water_render::draw_fire_fields", water_render::draw_fire_fields)); }
+    post.extend_from_slice(&[
+        ("fog_state::update_fog_state", fog_state::update_fog_state),
+        ("world_lights::update", world_lights::update),
+        ("audio_out::run_audio", audio_out::run_audio),
+        ("title_world::upload", title_world::upload),
+        ("pre_shadow::tag shrub", pre_shadow::tag::<shrub_render::ShrubMaterial>),
+        ("screen_tint::update", screen_tint::update),
+        ("display::place_boxed", display::place_boxed),
+        ("visibomb_view::overlay", visibomb_view::overlay),
+    ]);
+    if hud { post.push(("hud_render::apply_scaling", hud_render::apply_scaling)); }
     post.extend_from_slice(&[
         ("sky_render::follow_main_camera", sky_render::follow_main_camera),
-        ("travel_render::view_layers", travel_render::view_layers),
-        ("flight_render::update_sky", flight_render::update_sky),
-        ("flight_render::sky_tan", flight_render::sky_tan),
-        ("title_world::cameras", title_world::cameras),
-        ("display::place_boxed", display::place_boxed),
-        ("display::box_views", display::box_views),
-        ("display::fly_view", display::fly_view),
-        ("render_settings::apply", render_settings::apply),
-        ("fog_state::update_fog_state", fog_state::update_fog_state),
+        ("scene_render::fade_pass", scene_render::fade_pass),
+    ]);
+    if sea { post.push(("sea_render::draw", sea_render::draw)); }
+    post.push(("afterimage_render::draw", afterimage_render::draw));
+    if play { post.push(("gameplay::ratchet_visibility", gameplay::ratchet_visibility)); }
+    post.extend_from_slice(&[
+        ("fx_draw::draw_list1", fx_draw::draw_list1),
+        ("pre_shadow::tag billboard", pre_shadow::tag::<shrub_billboard::BillboardMaterial>),
+        ("travel_render::upload_actors", travel_render::upload_actors),
+        ("reticle_render::draw", reticle_render::draw),
+        ("reactive_render::draw", reactive_render::draw),
+        ("scene_render::upload", scene_render::upload),
+    ]);
+    if play { post.extend_from_slice(&[("gameplay::caster_order", gameplay::caster_order), ("menu_render::menu_layer", menu_render::menu_layer)]); }
+    post.extend_from_slice(&[
+        ("mirror_render::follow_cheat", mirror_render::follow_cheat),
+        ("moby_attach::rope_draw", moby_attach::rope_draw),
+        ("walloper_render::draw", walloper_render::draw),
         ("occlusion::update_occlusion", occlusion::update_occlusion),
+        ("moby_render::update_moby_occlusion", moby_render::update_moby_occlusion),
         ("tfrag_lod::update_tfrag_modes", tfrag_lod::update_tfrag_modes),
         ("tie_lod::update_tie_lods", tie_lod::update_tie_lods),
-    ]);
-    if play { post.push(("gameplay::caster_order", gameplay::caster_order)); }
-    post.extend_from_slice(&[
-        ("moby_render::update_moby_occlusion", moby_render::update_moby_occlusion),
-        ("tfrag_lod::update_lod_constants", tfrag_lod::update_lod_constants),
         ("particle_render::build_sprites", particle_render::build_sprites),
-    ]);
-    if play { post.extend_from_slice(&[("gameplay::upload", gameplay::upload), ("gameplay::write_visible", gameplay::write_visible)]); }
-    post.extend_from_slice(&[
-        ("moby_anim::upload_palette", moby_anim::upload_palette),
-        ("moby_spawn::force_hidden", moby_spawn::force_hidden),
-        ("moby_attach::upload", moby_attach::upload),
+        ("tfrag_lod::update_lod_constants", tfrag_lod::update_lod_constants),
+        ("title_world::cameras", title_world::cameras),
+        ("flight_render::update_sky", flight_render::update_sky),
+        ("screen_canvas::apply", screen_canvas::apply),
+        ("scene_render::force_hidden", scene_render::force_hidden),
     ]);
     if play { post.push(("interact_render::hide_hero", interact_render::hide_hero)); }
     post.extend_from_slice(&[
-        ("moby_attach::keep_absent_hidden", moby_attach::keep_absent_hidden),
-        ("scene_render::force_hidden", scene_render::force_hidden),
+        ("moby_spawn::force_hidden", moby_spawn::force_hidden),
+        ("moby_anim::upload_palette", moby_anim::upload_palette),
     ]);
-    if play { post.extend_from_slice(&[("travel_render::force_hidden", travel_render::force_hidden), ("gameplay::ratchet_visibility", gameplay::ratchet_visibility)]); }
+    if play { post.push(("travel_render::force_hidden", travel_render::force_hidden)); }
+    post.push(("flight_render::sky_tan", flight_render::sky_tan));
+    if play { post.push(("gameplay::write_visible", gameplay::write_visible)); }
     post.extend_from_slice(&[
-        ("afterimage_render::draw", afterimage_render::draw),
-        ("game_camera::upload_fog", game_camera::upload_fog),
-    ]);
-    if water { post.extend_from_slice(&[("water_render::draw", water_render::draw), ("water_render::draw_fire_fields", water_render::draw_fire_fields)]); }
-    if sea { post.push(("sea_render::draw", sea_render::draw)); }
-    post.extend_from_slice(&[
-        ("fx_draw::draw_list1", fx_draw::draw_list1),
-        ("reticle_render::draw", reticle_render::draw),
-        ("tesla_render::draw", tesla_render::draw),
-        ("walloper_render::draw", walloper_render::draw),
-        ("reactive_render::draw", reactive_render::draw),
+        ("display::fly_view", display::fly_view),
         ("flight_render::draw_fx", flight_render::draw_fx),
-        ("pre_shadow::tag tfrag", pre_shadow::tag::<tfrag_render::TfragMaterial>),
-        ("pre_shadow::tag tie", pre_shadow::tag::<tie_render::TieMaterial>),
-        ("pre_shadow::tag shrub", pre_shadow::tag::<shrub_render::ShrubMaterial>),
-        ("pre_shadow::tag billboard", pre_shadow::tag::<shrub_billboard::BillboardMaterial>),
-        ("shrub_render::update_sway", shrub_render::update_sway),
-        ("world_lights::update", world_lights::update),
-        ("sky_stars::build_meshes", sky_stars::build_meshes),
-        ("screen_tint::update", screen_tint::update),
-        ("visibomb_view::overlay", visibomb_view::overlay),
-        ("scene_render::upload", scene_render::upload),
-        ("scene_render::fade_pass", scene_render::fade_pass),
-        ("mirror_render::follow_cheat", mirror_render::follow_cheat),
-        ("aa_blit::follow_option", aa_blit::follow_option),
-        ("audio_out::run_audio", audio_out::run_audio),
-        ("travel_render::upload_actors", travel_render::upload_actors),
-        ("title_world::upload", title_world::upload),
-        ("moby_attach::rope_draw", moby_attach::rope_draw),
+        ("moby_attach::keep_absent_hidden", moby_attach::keep_absent_hidden),
+        PROPAGATE,
     ]);
-    if hud { post.push(("hud_render::apply_scaling", hud_render::apply_scaling)); }
-    post.push(PROPAGATE);
     add(Stage::PostUpdate, &post);
 
     // Last (rc-engine: unordered; the level swap first, then the frame's bookkeeping, the limiter last).

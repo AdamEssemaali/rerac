@@ -441,9 +441,14 @@ impl Gfx {
         let key = (name, defs.clone());
         if let Some(l) = self.libraries.get(&key) { return Ok(l.clone()); }
         let m = self.module(name, defs)?;
+        // wgpu-hal's compile options: the MSL version naga wrote for, invariant positions preserved (the default fast
+        // math stays on, as there).
+        let options = MTLCompileOptions::new();
+        options.setLanguageVersion(MTLLanguageVersion::Version3_2);
+        options.setPreserveInvariance(true);
         let lib = self
             .device
-            .newLibraryWithSource_options_error(&ns(&m.msl), None)
+            .newLibraryWithSource_options_error(&ns(&m.msl), Some(&options))
             .map_err(|e| anyhow!("{name}.wgsl: Metal: {}", e.localizedDescription()))?;
         self.libraries.insert(key, lib.clone());
         Ok(lib)
