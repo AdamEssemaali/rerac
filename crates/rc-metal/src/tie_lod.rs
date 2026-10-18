@@ -191,7 +191,7 @@ impl TieLodState {
         let mut data = u32_bytes(&init);
         data.extend_from_slice(&tail);
         // MAIN_WORLD too: rewritten every frame at the same size (see tfrag_lod).
-        let buffer = buffers.add(ShaderBuffer::new(&data, RenderAssetUsages::default()));
+        let buffer = buffers.add(ShaderBuffer::new(&data, RenderAssetUsages));
         let force_lod0 = std::env::var("RC_TIE_LOD").is_ok_and(|v| v.trim() == "0");
         let cpu_cull = !std::env::var("RC_TIE_CPU_CULL").is_ok_and(|v| v.trim() == "0");
         let n = inputs.len();
@@ -206,7 +206,7 @@ impl TieLodState {
         // Only a changed tail marks the buffer (crate::asset_write: every get_mut is an upload).
         let same = buffers.get(&self.buffer).and_then(|b| b.data.as_deref()).is_some_and(|d| d.len() >= self.tail.len() && d[d.len() - self.tail.len()..] == self.tail[..]);
         if same { return; }
-        if let Some(mut buf) = buffers.get_mut(&self.buffer) {
+        if let Some(buf) = buffers.get_mut(&self.buffer) {
             if let Some(d) = buf.data.as_mut() {
                 let at = d.len() - self.tail.len();
                 d[at..].copy_from_slice(&self.tail);

@@ -266,6 +266,7 @@ pub fn fresh_target(images: &mut Assets<Image>, old: &Handle<Image>, size: UVec2
 /// The PostUpdate systems that resize camera image targets (crate::menu_render's layer, crate::screen_canvas): rc-engine's
 /// `ResizeTargets` set. rc-metal reads every target's size when it renders, so its `refresh_resized_targets` (a Bevy
 /// camera-update workaround) has no counterpart.
+#[allow(dead_code)] // an ordering label only: the order itself is main.rs::schedule
 pub struct ResizeTargets;
 
 /// F11: fullscreen on / off (saved).

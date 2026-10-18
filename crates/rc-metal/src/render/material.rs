@@ -214,7 +214,7 @@ pub struct MeshTag(pub u32);
 pub struct Std140(pub Vec<u8>);
 
 impl Std140 {
-    fn align(&mut self, a: usize) { while self.0.len() % a != 0 { self.0.push(0); } }
+    fn align(&mut self, a: usize) { while !self.0.len().is_multiple_of(a) { self.0.push(0); } }
     pub fn f32(&mut self, v: f32) -> &mut Self { self.align(4); self.0.extend_from_slice(&v.to_le_bytes()); self }
     pub fn u32(&mut self, v: u32) -> &mut Self { self.align(4); self.0.extend_from_slice(&v.to_le_bytes()); self }
     pub fn i32(&mut self, v: i32) -> &mut Self { self.align(4); self.0.extend_from_slice(&v.to_le_bytes()); self }

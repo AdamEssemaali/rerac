@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Builds a ReRAC version folder and zips it (launcher contract: docs/plan/launcher_contract.md).
 #
-#   tools/package/package.sh              release build of `rerac` + `rerac-extract`, then package
+#   tools/package/package.sh              release build of `rerac` + `rerac-extract` (+ `rerac-metal` on macOS), then package
 #   tools/package/package.sh --no-build   package the binaries already in target/release
 #
 # Output: dist/rerac-<version>-<os>-<arch>/ and dist/rerac-<version>-<os>-<arch>.zip, holding
 #   rerac[.exe]              the runtime (crate rc-engine; plain release build, never `--features dev`)
 #   rerac-extract[.exe]      the extractor (crate rc-extract)
+#   rerac-metal              macOS only: the native Metal runtime (crate rc-metal, no Bevy; shaders embedded),
+#                            named by the optional manifest key `runtime_metal`
 #   assets/shaders/*.wgsl    the runtime's shaders (found next to the executable; rc-engine main.rs `asset_dir`)
 #   rerac-manifest.json      the version manifest, version taken from [workspace.package] in Cargo.toml
 #   README.txt
@@ -45,6 +47,10 @@ case "$(uname -m)" in
   *) arch="$(uname -m)" ;;
 esac
 
+# The native Metal runtime ships with macOS builds only.
+metal=""
+[ "$os" = macos ] && metal=rerac-metal
+
 name="rerac-$version-$os-$arch"
 target="${CARGO_TARGET_DIR:-$repo/target}/release"
 dist="$repo/dist"
@@ -53,21 +59,24 @@ out="$dist/$name"
 if [ "$build" = 1 ]; then
   # One cargo invocation for both binaries. No `--features dev`: that links Bevy dynamically.
   start=$(date +%s)
-  cargo build --release --locked -p rc-engine -p rc-extract --bins
+  cargo build --release --locked -p rc-engine -p rc-extract ${metal:+-p rc-metal} --bins
   echo "build: $(( $(date +%s) - start )) s"
 fi
-for b in rerac rerac-extract; do
+for b in rerac rerac-extract $metal; do
   [ -x "$target/$b$exe" ] || { echo "missing $target/$b$exe (run without --no-build)" >&2; exit 1; }
 done
 
 rm -rf "$out" "$dist/$name.zip"
 mkdir -p "$out/assets"
 cp "$target/rerac$exe" "$target/rerac-extract$exe" "$out/"
+[ -z "$metal" ] || cp "$target/$metal" "$out/"
 cp -R crates/rc-engine/assets/. "$out/assets/"
 find "$out/assets" -name '.*' -type f -delete
 
+metal_key=""
+[ -z "$metal" ] || metal_key=",\"runtime_metal\":\"$metal\""
 cat > "$out/rerac-manifest.json" <<EOF
-{"schema":1,"name":"rerac","version":"$version","game":"rac1","runtime":"rerac$exe","extractor":"rerac-extract$exe","supported_discs":["SCUS_971.99"],"data_format":1}
+{"schema":1,"name":"rerac","version":"$version","game":"rac1","runtime":"rerac$exe","extractor":"rerac-extract$exe","supported_discs":["SCUS_971.99"],"data_format":1$metal_key}
 EOF
 
 cat > "$out/README.txt" <<EOF
@@ -88,13 +97,19 @@ to rerac), rerac-manifest.json (the launcher's version manifest).
 Exit codes of rerac: 2 bad arguments, 3 data folder missing or incomplete, 4 data made for
 another version (re-extract).
 EOF
+if [ -n "$metal" ]; then
+  cat >> "$out/README.txt" <<EOF
+rerac-metal is the same game drawn natively with Metal (no Bevy): same arguments, same data.
+The launcher offers it under Settings > While playing > Native Metal renderer.
+EOF
+fi
 if [ "$os" = windows ]; then  # UNTESTED
   sed -i 's#\./rerac#rerac#g; s/$/\r/' "$out/README.txt"
 fi
 
 # Allow-list: exactly the files above, and only .wgsl under assets/. Anything else fails the package.
 unexpected="$(cd "$out" && find . -type f \
-  ! -path "./rerac$exe" ! -path "./rerac-extract$exe" ! -path ./rerac-manifest.json ! -path ./README.txt \
+  ! -path "./rerac$exe" ! -path "./rerac-extract$exe" ! -path "./${metal:-rerac$exe}" ! -path ./rerac-manifest.json ! -path ./README.txt \
   ! -path './assets/shaders/*.wgsl')"
 if [ -n "$unexpected" ]; then
   echo "unexpected files in the package (allow-list in tools/package/package.sh):" >&2
@@ -106,6 +121,10 @@ fi
 got="$("$out/rerac$exe" --version-json)"
 want="{\"name\":\"rerac\",\"version\":\"$version\",\"game\":\"rac1\",\"data_format\":1}"
 [ "$got" = "$want" ] || { echo "rerac --version-json: got $got, want $want" >&2; exit 1; }
+if [ -n "$metal" ]; then
+  got="$("$out/$metal" --version-json)"
+  [ "$got" = "$want" ] || { echo "$metal --version-json: got $got, want $want" >&2; exit 1; }
+fi
 
 case "$os" in
   macos) (cd "$dist" && ditto -c -k --keepParent "$name" "$name.zip") ;;

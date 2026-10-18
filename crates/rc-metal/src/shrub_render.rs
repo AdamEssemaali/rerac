@@ -573,7 +573,7 @@ fn spawn_shrubs_on(
     // light on any instance until crate::world_lights writes one.
     let n = shrubs.instances.len().max(1);
     let data = ShrubSway::initial_data(n);
-    let sway_buffer = buffers.add(ShaderBuffer::new(&data, RenderAssetUsages::default()));
+    let sway_buffer = buffers.add(ShaderBuffer::new(&data, RenderAssetUsages));
     let mut sway = ShrubSway { enabled: sway_enabled(), buffer: sway_buffer.clone(), len: n, instances: Vec::new(), last_tick: None, data };
 
     let fallback = images.add(Image::new_fill(

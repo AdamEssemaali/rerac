@@ -537,8 +537,8 @@ impl Gfx {
             }
         }
         if key.depth { d.setDepthAttachmentPixelFormat(DEPTH_FORMAT); }
-        // SAFETY: 1, 2, 4 or 8 samples (the device supports them; crate::render::frame clamps).
-        unsafe { d.setRasterSampleCount(key.samples.max(1) as usize) };
+        // 1, 2, 4 or 8 samples (the device supports them; crate::render::frame clamps).
+        d.setRasterSampleCount(key.samples.max(1) as usize);
         // SAFETY: the class matches every draw made with this pipeline (part of the key).
         unsafe {
             d.setInputPrimitiveTopology(match key.topology_class {

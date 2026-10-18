@@ -135,7 +135,9 @@ fn profile(update: std::time::Duration, render: std::time::Duration, wait: std::
     use std::sync::Mutex;
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if !*ON.get_or_init(|| std::env::var("RC_METAL_PROFILE").is_ok_and(|v| v.trim() == "1")) { return; }
-    static ACC: Mutex<Option<(std::time::Instant, u32, f64, f64, f64)>> = Mutex::new(None);
+    /// Window start, frames, and the summed update / encode / wait seconds.
+    type Acc = (std::time::Instant, u32, f64, f64, f64);
+    static ACC: Mutex<Option<Acc>> = Mutex::new(None);
     let mut a = ACC.lock().unwrap();
     let e = a.get_or_insert((std::time::Instant::now(), 0, 0.0, 0.0, 0.0));
     e.1 += 1;

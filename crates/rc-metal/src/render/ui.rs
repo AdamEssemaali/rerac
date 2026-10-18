@@ -8,7 +8,7 @@
 //! sorted by `ZIndex` then entity. Per node: the background colour, then the image or material.
 
 use super::frame::{IsDefaultUiCamera, UiCtx};
-use super::gfx::{bind, Binding, Blend, PipelineKey, TopologyClass};
+use super::gfx::{Binding, Blend, PipelineKey, TopologyClass};
 use super::material::{BindGroup, Std140};
 use crate::engine::assets::{Assets, Handle};
 use crate::engine::ecs::{Entity, World};
@@ -214,13 +214,13 @@ fn stack(world: &World, camera: Entity, default_camera: bool, target: Vec2) -> V
         place(world, r, parent, &mut rects, &children);
     }
     let mut out = Vec::new();
-    fn visit(world: &World, e: Entity, out: &mut Vec<(Entity, Vec4)>, rects: &HashMap<Entity, Vec4>, children: &HashMap<Entity, Vec<Entity>>, z: &dyn Fn(Entity) -> i32, gz: &dyn Fn(Entity) -> Option<i32>) {
+    fn visit(e: Entity, out: &mut Vec<(Entity, Vec4)>, rects: &HashMap<Entity, Vec4>, children: &HashMap<Entity, Vec<Entity>>, z: &dyn Fn(Entity) -> i32, gz: &dyn Fn(Entity) -> Option<i32>) {
         if let Some(r) = rects.get(&e) { out.push((e, *r)); }
         let mut cs: Vec<Entity> = children.get(&e).cloned().unwrap_or_default().into_iter().filter(|&c| gz(c).is_none()).collect();
         cs.sort_by_key(|&c| (z(c), crate::engine::ecs::bevy_order(c)));
-        for c in cs { visit(world, c, out, rects, children, z, gz); }
+        for c in cs { visit(c, out, rects, children, z, gz); }
     }
-    for r in roots { visit(world, r, &mut out, &rects, &children, &z, &gz); }
+    for r in roots { visit(r, &mut out, &rects, &children, &z, &gz); }
     out
 }
 

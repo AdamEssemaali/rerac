@@ -123,7 +123,7 @@ impl SpriteBuffer {
     }
 
     /// A GPU buffer of this capacity (kept in the main world too: it is rewritten every frame).
-    pub(crate) fn asset(&mut self) -> ShaderBuffer { ShaderBuffer::new(&self.contents(), RenderAssetUsages::default()) }
+    pub(crate) fn asset(&mut self) -> ShaderBuffer { ShaderBuffer::new(&self.contents(), RenderAssetUsages) }
 }
 
 /// A persistent mesh of `capacity` sprite quads: vertex `4q + k` carries `q << 2 | k`, and quad q is the
@@ -290,7 +290,7 @@ pub fn setup(ctx: &mut Ctx) {
     let mut images = res.get_mut::<Assets<Image>>();
     let mut materials = res.get_mut::<Assets<ParticleMaterial>>();
     let mut shader_buffers = res.get_mut::<Assets<ShaderBuffer>>();
-    let mut inserts: Vec<Box<dyn FnOnce(&mut Resources)>> = Vec::new();
+    let mut inserts: Vec<crate::engine::ecs::ResInsert> = Vec::new();
     let lp = &level.0.particles;
     let defs = lp.textures.as_ref().map(|t| t.defs.clone());
     let owners: Vec<Owner> = lp.owners.iter().map(|(o, _)| o.clone()).collect();

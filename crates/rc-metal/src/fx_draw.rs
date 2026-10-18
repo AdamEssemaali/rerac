@@ -330,7 +330,7 @@ impl FxSlots {
                         }
                     }
                     None => {
-                        let mut m = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+                        let mut m = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages);
                         g.prims.write(&mut m);
                         let mesh = a.meshes.add(m);
                         let mat = a.materials.add(FxPrimMaterial { texture: img, fog: a.fog, params, order: band + k as f32 });

@@ -212,7 +212,7 @@ pub(crate) fn spawn_billboards(
                 .with_inserted_attribute(ATTRIBUTE_BILLBOARD_INFO, VertexAttributeValues::Uint32(vinfo))
                 .with_inserted_indices(Indices::U32(idx)),
         );
-        let image = images.add(mip_image(levels, sampler.clone()).0);
+        let image = images.add(mip_image(levels, sampler).0);
         let mxl = regs.mxl().min(levels.len() as u32 - 1);
         draws.push(ClassDraw { class: ci, o_class: c.o_class, mesh, image, mxl, k: regs.lod_k(), centroid: centroid / members.len() as f32 });
     }

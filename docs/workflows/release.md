@@ -20,6 +20,7 @@ plain `--release` build (never `--features dev`).
 The script packages exactly these and fails if anything else ends up in the folder:
 
 * `rerac` (crate `rc-engine`) and `rerac-extract` (crate `rc-extract`),
+* on macOS, `rerac-metal` (crate `rc-metal`, the native Metal runtime; manifest key `runtime_metal`),
 * `assets/shaders/*.wgsl`,
 * `rerac-manifest.json` (the launcher manifest),
 * `README.txt`.

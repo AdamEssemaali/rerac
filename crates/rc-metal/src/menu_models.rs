@@ -250,7 +250,7 @@ fn setup_inner(ctx: &mut Ctx) -> Option<PreviewRt> {
         }
     };
     let level_class = |o: i32| m.classes.iter().position(|c| c.o_class == o).map(|ci| (m.classes[ci].clone(), m.anim[ci].clone()));
-    let Some((ratchet, mut ratchet_anim)) = level_class(gadget::RATCHET_O_CLASS) else { return None };
+    let (ratchet, mut ratchet_anim) = level_class(gadget::RATCHET_O_CLASS)?;
     // The streamed `ratchet_seqs` entries become Ratchet's sequences from his class count on (the game's slots
     // `base + e`, filled as the stream player needs them; the port has them all).
     let base = ratchet.class.header.sequence_count as usize;

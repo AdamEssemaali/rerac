@@ -463,7 +463,7 @@ pub fn draw(ctx: &mut Ctx) {
             img.sampler = repeat_sampler();
             images.add(img)
         });
-        if let Some(mut img) = images.get_mut(&*h) { img.data = Some(st.pixels.clone()); }
+        if let Some(img) = images.get_mut(&*h) { img.data = Some(st.pixels.clone()); }
         made.push(a);
         true
     };
@@ -567,7 +567,7 @@ pub fn draw(ctx: &mut Ctx) {
             g.prims.update(&mut meshes, mesh);
             let need = materials.get(&*mat).is_none_or(|m| m.texture != img || m.params.misc != params.misc || m.fog != g.fog || m.order != g.bias);
             if need {
-                if let Some(mut m) = materials.get_mut(&*mat) {
+                if let Some(m) = materials.get_mut(&*mat) {
                     m.texture = img;
                     m.params = params;
                     m.fog = g.fog;
@@ -581,7 +581,7 @@ pub fn draw(ctx: &mut Ctx) {
             }
             continue;
         }
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages);
         g.prims.write(&mut mesh);
         let mesh = meshes.add(mesh);
         let mat = materials.add(FxPrimMaterial { texture: img, fog: g.fog, params, order: g.bias });

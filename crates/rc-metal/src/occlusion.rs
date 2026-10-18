@@ -51,6 +51,7 @@ pub fn load(core: &LevelCore, core_data: &[u8], gameplay: &[u8], tfrags: &[Tfrag
 
 /// Runs before every system that tests the mask (rc-metal: a schedule position, `update_occlusion` itself).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(dead_code)] // an ordering label only: the order itself is main.rs::schedule
 pub struct OcclusionSet;
 
 /// Counts one renderer reports for the stats line: occlusion-culled, then culled by its own tests, then drawn.

@@ -108,10 +108,17 @@ trait MaterialKind3d {
     fn collect(&mut self, ctx: &Ctx, gfx: &mut Gfx, view: &ViewInfo, serial: &mut u64, out: &mut Vec<Item>);
 }
 
+/// A bind group's bindings by number.
+type Bindings = Vec<(u32, Binding)>;
+/// A target (None: the window), its width, height and samples.
+type DepthKey = (Option<AssetId>, u32, u32, u32);
+/// [`DepthKey`] and the colour format.
+type MsaaKey = (Option<AssetId>, u32, u32, u32, TextureFormat);
+
 struct Kind3d<M: Material> {
     cache: HashMap<(AssetId, u64, TextureFormat, u32), Rc<CachedPipeline>>,
     /// Per material: its bind group, valid while the GPU objects it names stay (`Gfx::generation`).
-    bindings: HashMap<AssetId, (u64, Rc<Vec<(u32, Binding)>>)>,
+    bindings: HashMap<AssetId, (u64, Rc<Bindings>)>,
     _m: PhantomData<M>,
 }
 
@@ -479,8 +486,9 @@ pub struct Renderer {
     kinds2d: Vec<(TypeId, Box<dyn MaterialKind2d>)>,
     serial: u64,
     /// Depth per (target, size, samples), shared by the cameras of one target.
-    depth: HashMap<(Option<AssetId>, u32, u32, u32), Retained<Texture>>,
-    msaa: HashMap<(Option<AssetId>, u32, u32, u32, TextureFormat), Retained<Texture>>,
+    depth: HashMap<DepthKey, Retained<Texture>>,
+    /// Multisampled colour per (target, size, samples, format).
+    msaa: HashMap<MsaaKey, Retained<Texture>>,
     scratch: HashMap<(u32, u32, TextureFormat), Retained<Texture>>,
     hooks: Vec<(Hook, HookFn)>,
     pub fullscreen: FullscreenPasses,

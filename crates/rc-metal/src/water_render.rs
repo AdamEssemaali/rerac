@@ -410,8 +410,8 @@ fn setup_state(ctx: &mut Ctx) -> Option<WaterState> {
     let n_patches = records.len();
     let mut frame_bytes = vec![0u8; n_slots.max(1) * FRAME_RECORD];
     let ripple_bytes = vec![0u8; n_patches.max(1) * RIPPLE_WORDS * 4];
-    let frame = buffers.add(ShaderBuffer::new(&frame_bytes, RenderAssetUsages::default()));
-    let ripple_buf = buffers.add(ShaderBuffer::new(&ripple_bytes, RenderAssetUsages::default()));
+    let frame = buffers.add(ShaderBuffer::new(&frame_bytes, RenderAssetUsages));
+    let ripple_buf = buffers.add(ShaderBuffer::new(&ripple_bytes, RenderAssetUsages));
     let mut all_mats = Vec::new();
     let mut new_mat = |materials: &mut Assets<WaterMaterial>, texture: Handle<Image>, params: WaterParams, slot: u32| {
         let h = materials.add(WaterMaterial { texture, fog, params, frame: frame.clone(), ripple: ripple_buf.clone(), slot });
@@ -429,8 +429,8 @@ fn setup_state(ctx: &mut Ctx) -> Option<WaterState> {
                     patches.push(None);
                     continue;
                 };
-                let mw = new_mat(&mut *materials, tw, params(p.fix_water, 2, slot, i), slot);
-                let me = new_mat(&mut *materials, te, params(p.fix_env, 3, slot + 1, i), slot + 1);
+                let mw = new_mat(&mut materials, tw, params(p.fix_water, 2, slot, i), slot);
+                let me = new_mat(&mut materials, te, params(p.fix_env, 3, slot + 1, i), slot + 1);
                 let ew = spawn(world, mesh.clone(), mw.clone(), Visibility::Hidden, format!("ripple patch {i} water"));
                 let ee = spawn(world, mesh.clone(), me.clone(), Visibility::Hidden, format!("ripple patch {i} env"));
                 patches.push(Some(PatchDraw { entities: [ew, ee], mats: [mw, me], fx: [p.fx_water, p.fx_env], fix: [p.fix_water, p.fix_env], slots: [slot, slot + 1], visible: false }));
@@ -454,7 +454,7 @@ fn setup_state(ctx: &mut Ctx) -> Option<WaterState> {
             let mut slots = Vec::new();
             for layer in 0..2 {
                 let Some(t) = fx_image(&mut fx_images, &mut images, tex, d.fx[layer]) else { continue };
-                let m = new_mat(&mut *materials, t, params(d.fix[layer], layer as u32, slot, 0), slot);
+                let m = new_mat(&mut materials, t, params(d.fix[layer], layer as u32, slot, 0), slot);
                 // Until the first draw: the class's z blend, no scroll, no wobble.
                 write_frame(&mut frame_bytes, slot, w.to_f32(), [0.0; 2], &[[0.0; 2]; 8]);
                 slots.push(slot);
@@ -474,8 +474,8 @@ fn setup_state(ctx: &mut Ctx) -> Option<WaterState> {
         let placeholder = images.add(Image::default());
         for (i, p) in patches.iter_mut().enumerate() {
             if p.is_some() { continue; }
-            let mw = new_mat(&mut *materials, placeholder.clone(), params(0, 2, slot, i), slot);
-            let me = new_mat(&mut *materials, placeholder.clone(), params(0, 3, slot + 1, i), slot + 1);
+            let mw = new_mat(&mut materials, placeholder.clone(), params(0, 2, slot, i), slot);
+            let me = new_mat(&mut materials, placeholder.clone(), params(0, 3, slot + 1, i), slot + 1);
             let ew = spawn(world, mesh.clone(), mw.clone(), Visibility::Hidden, format!("ripple patch {i} water"));
             let ee = spawn(world, mesh.clone(), me.clone(), Visibility::Hidden, format!("ripple patch {i} env"));
             *p = Some(PatchDraw { entities: [ew, ee], mats: [mw, me], fx: [-1, -1], fix: [0, 0], slots: [slot, slot + 1], visible: false });
@@ -570,7 +570,7 @@ pub fn draw(ctx: &mut Ctx) {
     if fog != st.fog {
         st.fog = fog;
         for h in &st.materials {
-            if let Some(mut m) = materials.get_mut(h) { m.fog = fog; }
+            if let Some(m) = materials.get_mut(h) { m.fog = fog; }
         }
     }
     let Some(cam_t) = main_camera(world) else { return };
@@ -650,7 +650,7 @@ fn draw_ripples(
                 for k in 0..2 {
                     if fx[k] != pd.fx[k] || fix[k] != pd.fix[k] {
                         let img = tex.and_then(|t| fx_image(&mut st.fx_images, images, t, fx[k]));
-                        if let (Some(img), Some(mut m)) = (img, materials.get_mut(&pd.mats[k])) {
+                        if let (Some(img), Some(m)) = (img, materials.get_mut(&pd.mats[k])) {
                             m.texture = img;
                             m.params = params(fix[k], 2 + k as u32, pd.slots[k], p);
                             pd.fx[k] = fx[k];
@@ -889,7 +889,7 @@ pub fn draw_fire_fields(ctx: &mut Ctx) {
     st.fog = fog;
     if fog_changed {
         for (_, _, mat, _) in st.slots.iter().flat_map(|s| s.groups.iter().flatten()) {
-            if let Some(mut mm) = materials.get_mut(mat) { mm.fog = fog; }
+            if let Some(mm) = materials.get_mut(mat) { mm.fog = fog; }
         }
     }
     if counter == st.drawn { return; }
@@ -924,12 +924,12 @@ pub fn draw_fire_fields(ctx: &mut Ctx) {
                     Some((_, mesh, mat, cur)) => {
                         q.update(&mut meshes, mesh);
                         if *cur != img {
-                            if let Some(mut mm) = materials.get_mut(&*mat) { mm.texture = img.clone(); }
+                            if let Some(mm) = materials.get_mut(&*mat) { mm.texture = img.clone(); }
                             *cur = img;
                         }
                     }
                     None => {
-                        let mut m = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+                        let mut m = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages);
                         q.write(&mut m);
                         let mesh = meshes.add(m);
                         let params = FxPrimParams::blend(g == 0);

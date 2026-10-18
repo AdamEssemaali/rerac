@@ -290,6 +290,7 @@ pub fn despawn_lod_parents(ctx: &mut Ctx) {
 /// The gameplay tick system's set (crate::menu_render runs its frame after it): an ordering label of the central
 /// schedule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[allow(dead_code)] // an ordering label only: the order itself is main.rs::schedule
 pub struct GameTick;
 
 /// The persistent game state (what the memory card saves), `rc_game::game_state`.
@@ -1127,7 +1128,7 @@ fn gameplay_entities(world: &crate::engine::ecs::World) -> Vec<(Entity, MeshTag)
 
 /// Resource inserts made during a system (Bevy's `commands.insert_resource`), applied when it ends.
 #[derive(Default)]
-struct Inserts(Vec<Box<dyn FnOnce(&mut Resources)>>);
+struct Inserts(Vec<crate::engine::ecs::ResInsert>);
 
 impl Inserts {
     fn insert<T: 'static>(&mut self, v: T) { self.0.push(Box::new(move |r| r.insert(v))); }
@@ -1945,7 +1946,7 @@ pub fn ratchet_visibility(ctx: &mut Ctx) {
 /// Debug: F9 prints the hero, the engine's own Ratchet draw and every moby within 12 units of the hero (id, class,
 /// state, mode bits, collision, position) with the visibility of its generic moby meshes. `RC_MOBY_DUMP_AT=<tick>`
 /// prints it once at the first gameplay tick from that one on (headless runs), `RC_MOBY_DUMP_RADIUS` widens the 12.
-/// F10 (debug): the respawn state, in the format of the PCSX2 probe `work/scratch/respawn_probe.py` (the original's
+/// F10 (debug): the respawn state, in the format of the PCSX2 probe `respawn_probe.py` (the original's
 /// memory over PINE), so the two can be compared line by line: the mission bytes (the arrival copy 0x15fc88, the save's
 /// 0x14c050), the checkpoint, this visit's kills 0x1baea4, the never-again bytes 0x1bbb04, the visit death bits
 /// 0x1ba950, the persistent death bits 0x14c190 and the bolt-drop slots 0x14d590 (spawn id / collected).

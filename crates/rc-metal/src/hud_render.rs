@@ -719,7 +719,7 @@ fn setup_inner(
         HudMesh,
         Name::new("hud primitives"),
     ));
-    let full = || Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() };
+    let full = || Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0) };
     // On the frame's 4:3 box (crate::display: in 16:9 the 512×416 screen is centred, the world widens around it).
     // The whole frame (crate::display): the 512×416 screen in its middle, wider in 16:9 ([`HudRuntime::extra`]).
     let hud_node = world.spawn((full(), MaterialNode(composites.add(HudComposite { image: target.clone(), scaling: sc })), GlobalZIndex(i32::MAX), HudCompositeNode, Name::new("hud composite")));

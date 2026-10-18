@@ -231,12 +231,6 @@ pub struct Compiled {
     pub sizes: Option<(u64, Vec<(u32, u32)>)>,
 }
 
-impl Compiled {
-    pub fn slot(&self, group: u32, binding: u32) -> Option<&Resource> {
-        self.resources.iter().find(|r| r.group == group && r.binding == binding)
-    }
-}
-
 /// Parses, validates and translates WGSL to MSL (see the module doc for the binding map).
 pub fn compile(wgsl: &str, label: &str) -> Result<Compiled> {
     use naga::back::msl;

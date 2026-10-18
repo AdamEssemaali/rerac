@@ -134,6 +134,10 @@ Background and the decisions behind it: `docs/plan/launcher_extractor.md`, `docs
     Windows), `rerac-extract`, `assets/shaders/*.wgsl`, `rerac-manifest.json`, `README.txt`. The manifest names
     the binaries by these relative paths. The runtime finds `assets/` next to its real (symlink-resolved) executable,
     so the folder can be copied or moved as a whole, but `rerac` must not be copied out of it alone.
+    macOS packages also hold `rerac-metal` (crate rc-metal: the same game on Metal without Bevy, shaders embedded,
+    same CLI, exit codes and `--version-json`; `docs/plan/metal_renderer.md`), named by the optional manifest key
+    `"runtime_metal":"rerac-metal"` (additive: same path rules as `runtime`; launchers that do not know it ignore it).
+    The launcher starts it instead of `runtime` when its renderer setting is `metal` and the file exists.
 16. `<game_data_dir>` (`games/rac1/data/`) holds the Tier 0 archive directly, in the same layout as the development
     `extracted/` tree: `boot/`, `toc.bin`, `global/`, `levels/NN/`, plus `extract-info.json`. See
     `docs/plan/launcher_extractor.md` §4.1. `extract` adds `cache/v1/` (clarification 17); `verify` ignores it.

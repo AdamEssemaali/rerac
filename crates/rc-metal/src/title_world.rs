@@ -210,10 +210,11 @@ fn title_phase(fer: &crate::saves::FrontEndRt) -> Option<&rc_game::frontend::Fro
 /// Loads the title world on a worker thread once the front end runs (the boot's still covers it), then spawns its
 /// draws when the title phase starts (module docs).
 pub fn spawn(ctx: &mut Ctx) {
-    // The star simulation, fog state and clear colour the title replaces (inserted after the borrows end).
+    // The star simulation, fog state and clear colour the title replaces (inserted after the borrows end; every path
+    // that reaches the end sets the last two).
     let mut star_sim = None;
-    let mut fog_state = None;
-    let mut clear = None;
+    let fog_state;
+    let clear;
     // The LOD and sway states the spawns build (rc-engine: their `commands.insert_resource`), inserted after the borrows.
     let mut cmds = Commands::default();
     {

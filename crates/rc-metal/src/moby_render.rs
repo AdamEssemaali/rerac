@@ -1068,8 +1068,8 @@ fn spawn_mobys(
     }
     st.palette = palette_len;
     // MAIN_WORLD too: the scheduler-driven instances' records are rewritten per tick (MobyOcclusion::drive).
-    let inst_buffer = buffers.add(ShaderBuffer::new(&rec, RenderAssetUsages::default()));
-    let palette = buffers.add(ShaderBuffer::new(&moby_anim::identity_palette(palette_len), RenderAssetUsages::default()));
+    let inst_buffer = buffers.add(ShaderBuffer::new(&rec, RenderAssetUsages));
+    let palette = buffers.add(ShaderBuffer::new(&moby_anim::identity_palette(palette_len), RenderAssetUsages));
     let table_bytes: Vec<u8> = match &m.lighting {
         Some(l) => l.table.0.iter().flatten().flat_map(|w| w.to_le_bytes()).collect(),
         None => vec![0; 256 * 8],
@@ -1078,7 +1078,7 @@ fn spawn_mobys(
     let cpu_colors = buffers.add(ShaderBuffer::new(&cpu_bytes, RenderAssetUsages::RENDER_WORLD));
     // MAIN_WORLD too: rewritten per frame at the same size (update_moby_occlusion).
     let lod_bytes = moby_lod::default_lod_records(m.instances.len());
-    let lods = buffers.add(ShaderBuffer::new(&lod_bytes, RenderAssetUsages::default()));
+    let lods = buffers.add(ShaderBuffer::new(&lod_bytes, RenderAssetUsages));
     if m.cpu_light && moby_anim::anim_enabled() { println!("mobys: RC_MOBY_CPU_LIGHT=1 draws the bind pose (the CPU colours are for the identity palette)"); }
     let anim_state = MobyAnim::new(animate, anims, palette.clone(), palette_len);
 
@@ -1836,11 +1836,11 @@ impl ExtraMobys {
         };
         let slots = records.len() / RECORD_SIZE;
         let proto = MatProto {
-            instances: buffers.add(ShaderBuffer::new(&records, RenderAssetUsages::default())),
-            palette: buffers.add(ShaderBuffer::new(&palette, RenderAssetUsages::default())),
+            instances: buffers.add(ShaderBuffer::new(&records, RenderAssetUsages)),
+            palette: buffers.add(ShaderBuffer::new(&palette, RenderAssetUsages)),
             normal_table: buffers.add(ShaderBuffer::new(&table_bytes, RenderAssetUsages::RENDER_WORLD)),
             cpu_colors: buffers.add(ShaderBuffer::new(&[0u8; 16], RenderAssetUsages::RENDER_WORLD)),
-            lods: buffers.add(ShaderBuffer::new(&moby_lod::default_lod_records(slots), RenderAssetUsages::default())),
+            lods: buffers.add(ShaderBuffer::new(&moby_lod::default_lod_records(slots), RenderAssetUsages)),
         };
         ExtraMobys {
             instances: proto.instances.clone(),

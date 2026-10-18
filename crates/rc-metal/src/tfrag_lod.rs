@@ -161,7 +161,7 @@ impl TfragLodState {
         // Only a changed tail marks the buffer (crate::asset_write: every get_mut is an upload).
         let same = buffers.get(&self.modes).and_then(|b| b.data.as_deref()).is_some_and(|d| d.len() >= self.tail.len() && d[d.len() - self.tail.len()..] == self.tail[..]);
         if same { return; }
-        if let Some(mut buf) = buffers.get_mut(&self.modes) {
+        if let Some(buf) = buffers.get_mut(&self.modes) {
             if let Some(d) = buf.data.as_mut() {
                 let at = d.len() - self.tail.len();
                 d[at..].copy_from_slice(&self.tail);
@@ -178,7 +178,7 @@ impl TfragLodState {
         for i in 0..n { tail[i * 4..i * 4 + 4].copy_from_slice(&0xffffu32.to_le_bytes()); }
         let mut init = vec![0u8; n * 4];
         init.extend_from_slice(&tail);
-        let modes = buffers.add(ShaderBuffer::new(&init, RenderAssetUsages::default()));
+        let modes = buffers.add(ShaderBuffer::new(&init, RenderAssetUsages));
         let tfrags = level
             .tfrags
             .iter()

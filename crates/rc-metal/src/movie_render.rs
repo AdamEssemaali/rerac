@@ -202,7 +202,7 @@ pub fn plugin(app: &mut crate::engine::app::App) {
     if let Some((n, _)) = debug { println!("movie: RC_PLAY_MOVIE={n}: in-level movie {n} (mpegs[{}]) after gameplay tick 1", MOVIE_BASE_NTSC + n); }
     // The picture's image (rc-engine made it in `setup`; the resource needs a handle from the start here).
     let size = Extent3d { width: 512, height: 416, depth_or_array_layers: 1 };
-    let mut img = Image::new_fill(size, TextureDimension::D2, &[0, 0, 0, 255], TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default());
+    let mut img = Image::new_fill(size, TextureDimension::D2, &[0, 0, 0, 255], TextureFormat::Rgba8UnormSrgb, RenderAssetUsages);
     img.sampler = ImageSampler::nearest();
     let image = app.ctx.res_mut::<Assets<Image>>().add(img);
     app.ctx.res.insert(MovieState {
@@ -224,7 +224,7 @@ pub fn tick_allowed(ctx: &Ctx) -> bool { ctx.try_res::<MovieState>().is_none_or(
 
 pub fn setup(ctx: &mut Ctx) {
     let image = ctx.res::<MovieState>().image.clone();
-    let full = || Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() };
+    let full = || Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0) };
     // On the frame's 4:3 box (crate::display); the root is black around it.
     let picture = ctx.world.spawn((full(), ImageNode::new(image), Visibility::Hidden, crate::display::UiBoxed, Name::new("movie picture")));
     let fade = ctx.world.spawn((full(), BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)), Name::new("movie fade")));
@@ -401,7 +401,7 @@ pub fn movie_frame(ctx: &mut Ctx) {
     // The picture.
     if let Some(p) = out.picture {
         if rt.shown != Some(p) && rt.received > 0 {
-            if let Some(mut img) = images.get_mut(&st.image) { img.data = Some(rt.rgba.clone()); }
+            if let Some(img) = images.get_mut(&st.image) { img.data = Some(rt.rgba.clone()); }
             if st.trace && p.is_multiple_of(30) { println!("movie: app frame {} (movie frame {}): picture {} of {:?}", frame_no.0, rt.frames, rt.received - 1, rt.total); }
             rt.shown = Some(p);
         }

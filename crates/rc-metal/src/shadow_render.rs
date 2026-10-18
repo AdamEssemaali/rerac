@@ -106,6 +106,7 @@ pub struct ShadowVolumes {
 /// rc-engine's render-world set of the shadow pass (crate::pre_shadow drew before it); here [`shadow_hook`] is the
 /// renderer's `Hook::AfterOpaque`, after the pre-shadow draws. Kept as a name only.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[allow(dead_code)] // an ordering label only: the order itself is main.rs::schedule
 pub struct ShadowPassSet;
 
 /// The camera whose view gets the shadow pass (the main world camera).
@@ -324,9 +325,12 @@ const VOLUME: u8 = 0;
 const DARKEN: u8 = 1;
 const DEBUG: u8 = 2;
 
+/// The count target's width, height and samples.
+type CountKey = (usize, usize, u32);
+
 thread_local! {
     /// The count target, kept while the view's size and samples stay (rc-engine: Bevy's texture cache).
-    static COUNT_TARGET: RefCell<Option<((usize, usize, u32), Retained<gfx::Texture>)>> = const { RefCell::new(None) };
+    static COUNT_TARGET: RefCell<Option<(CountKey, Retained<gfx::Texture>)>> = const { RefCell::new(None) };
 }
 
 /// The pipeline of `kind` for the view's samples and colour format.

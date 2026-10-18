@@ -41,6 +41,7 @@ use std::time::Instant;
 
 /// The per-frame fog update; every fog consumer runs after it (rc-metal: a schedule position, `update_fog_state`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(dead_code)] // an ordering label only: the order itself is main.rs::schedule
 pub struct FogSet;
 
 /// Level data for the fog state: gameplay section 0x80 and the collision mesh for the underwater test.

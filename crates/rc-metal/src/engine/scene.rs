@@ -33,7 +33,7 @@ impl Transform {
     pub fn with_rotation(mut self, r: Quat) -> Self { self.rotation = r; self }
     pub fn with_scale(mut self, s: Vec3) -> Self { self.scale = s; self }
 
-    pub fn to_matrix(&self) -> Mat4 { Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation) }
+    pub fn to_matrix(self) -> Mat4 { Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation) }
     pub fn compute_matrix(&self) -> Mat4 { self.to_matrix() }
     pub fn compute_affine(&self) -> Affine3A { Affine3A::from_scale_rotation_translation(self.scale, self.rotation, self.translation) }
 
@@ -91,7 +91,7 @@ impl GlobalTransform {
     pub const IDENTITY: GlobalTransform = GlobalTransform(Affine3A::IDENTITY);
     pub fn translation(&self) -> Vec3 { self.0.translation.into() }
     pub fn affine(&self) -> Affine3A { self.0 }
-    pub fn to_matrix(&self) -> Mat4 { Mat4::from(self.0) }
+    pub fn to_matrix(self) -> Mat4 { Mat4::from(self.0) }
     pub fn compute_matrix(&self) -> Mat4 { self.to_matrix() }
     pub fn compute_transform(&self) -> Transform { Transform::from_matrix(self.to_matrix()) }
     pub fn forward(&self) -> Vec3 { self.0.matrix3.mul_vec3(Vec3::NEG_Z).normalize_or_zero() }
@@ -192,7 +192,7 @@ impl Color {
     pub fn srgba_u8(r: u8, g: u8, b: u8, a: u8) -> Self { Self::srgba(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0) }
 
     /// Linear RGBA, as a clear of an sRGB target needs it.
-    pub fn to_linear(&self) -> [f32; 4] {
+    pub fn to_linear(self) -> [f32; 4] {
         let l = |c: f32| if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
         [l(self.srgba[0]), l(self.srgba[1]), l(self.srgba[2]), self.srgba[3]]
     }

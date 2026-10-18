@@ -34,11 +34,8 @@ impl Material for StandardMaterial {
         let mut s = Std140::default();
         s.vec4(glam::Vec4::from_array(self.base_color.to_linear())).vec4(glam::Vec4::new(self.base_color_texture.is_some() as u32 as f32, 0.0, 0.0, 0.0));
         b.uniform(0, s.finish());
-        match &self.base_color_texture {
-            Some(t) => b.texture_sampler(1, t),
-            // A texture must be bound: the material's own colour stands alone (flags.x = 0).
-            None => {}
-        }
+        // Without a texture the material's own colour stands alone (flags.x = 0).
+        if let Some(t) = &self.base_color_texture { b.texture_sampler(1, t); }
     }
     fn pipeline_key(&self) -> u64 { ((self.cull_mode.is_some() as u64) << 8) | matches!(self.alpha_mode, AlphaMode::Blend) as u64 }
 }

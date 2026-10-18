@@ -92,11 +92,14 @@ pub fn deterministic() -> bool {
 /// `RC_DUMP_REALTIME=1` (dev only): `RC_DUMP_FRAMES` without frame-exact mode (wall-clock ticks, as in play).
 pub fn dump_realtime() -> bool { env("RC_DUMP_REALTIME").as_deref() == Some("1") }
 
+/// What a capture does with the frame's RGBA pixels (width, height, pixels).
+pub type CaptureDone = Box<dyn FnOnce(u32, u32, &[u8], &mut crate::engine::ecs::Resources)>;
+
 /// A capture of this frame's render (Bevy's `Screenshot` entity and its `ScreenshotCaptured` observer): the image (None:
 /// the window's drawable), and what to do with the RGBA pixels. Taken by the app after the frame is rendered.
 pub struct CaptureRequest {
     pub target: Option<Handle<Image>>,
-    pub done: Box<dyn FnOnce(u32, u32, &[u8], &mut crate::engine::ecs::Resources)>,
+    pub done: CaptureDone,
 }
 
 /// The captures requested this frame.
@@ -219,7 +222,7 @@ pub fn exit_before_capture(ctx: &mut Ctx) {
 }
 
 pub fn save_rgb(path: &std::path::Path, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
-    let rgb: Vec<u8> = rgba.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
+    let rgb: Vec<u8> = rgba.as_chunks::<4>().0.iter().flat_map(|p| [p[0], p[1], p[2]]).collect();
     let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
     let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w, h);
     enc.set_color(png::ColorType::Rgb);
@@ -264,7 +267,7 @@ pub fn frame_screenshot(ctx: &mut Ctx) {
             let mut status = 0;
             // An all-zero image is a frame that was never drawn (an occluded window: see the module docs); nothing the
             // game draws is pure black edge to edge. Capture a later frame instead, for at most MAX_RETRY_FRAMES frames.
-            if rgba.chunks_exact(4).all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0) {
+            if rgba.as_chunks::<4>().0.iter().all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0) {
                 if !give_up {
                     eprintln!("determinism: frame {n} came back blank (window not presented?); capturing a later frame");
                     retry.store(true, Ordering::Release);

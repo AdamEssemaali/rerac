@@ -348,7 +348,7 @@ fn setup_inner(
         Name::new("menu layer 2D camera (snapshot + black)"),
     ));
     let node = world.spawn((
-        Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0) },
         ImageNode::new(image.clone()),
         GlobalZIndex(i32::MAX - 1),
         Visibility::Hidden,
@@ -404,7 +404,7 @@ fn setup_inner(
     }
     // The snapshot is the menu layer's background: a UI node of its 2D camera.
     world.spawn((
-        Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(100.0) },
         ImageNode::new(snapshot),
         Visibility::Hidden,
         SnapshotNode,
@@ -1749,7 +1749,7 @@ pub fn snapshot_hook(hc: &mut crate::render::frame::HookCtx) -> anyhow::Result<(
     };
     let (src_tex, src_format) = src;
     let mut defs = crate::shader::Defs::new();
-    defs.insert("DARKEN".into(), crate::shader::Def::Int(DARKEN as i32));
+    defs.insert("DARKEN".into(), crate::shader::Def::Int(DARKEN));
     if src_format.is_srgb() { defs.insert("SRC_SRGB".into(), crate::shader::Def::Flag); }
     let key = PipelineKey {
         shader: "menu_snapshot",

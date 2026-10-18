@@ -86,10 +86,10 @@ struct FogUploaded(Option<(GameFog, crate::graphics::GraphicsSettings)>);
 /// changes.
 pub fn upload_fog(ctx: &mut Ctx) {
     let fog = *ctx.res::<GameFog>();
-    let gfx = ctx.res::<crate::graphics::GraphicsSettings>().clone();
+    let gfx = *ctx.res::<crate::graphics::GraphicsSettings>();
     let mut last = ctx.res_mut::<FogUploaded>();
     if last.0.as_ref().is_some_and(|(f, g)| *f == fog && *g == gfx) { return; }
-    last.0 = Some((fog, gfx.clone()));
+    last.0 = Some((fog, gfx));
     drop(last);
     if let Some(h) = FOG_BUFFER.get() { crate::asset_write::set_buffer(&mut ctx.res_mut::<Assets<ShaderBuffer>>(), h, &fog_bytes(&fog.uniform, &gfx)); }
 }
@@ -104,7 +104,7 @@ pub fn plugin(app: &mut crate::engine::app::App, fog: LevelFog) {
         if std::env::var("RC_FOG").is_ok_and(|v| v.trim() == "0") { " (disabled by RC_FOG=0)" } else { "" }
     );
     let fog = GameFog::new(fog, rc_game::fog_zones::PARTICLE_FAR12);
-    let buf = ShaderBuffer::new(&fog_bytes(&fog.uniform, &crate::graphics::GraphicsSettings::default()), RenderAssetUsages::default());
+    let buf = ShaderBuffer::new(&fog_bytes(&fog.uniform, &crate::graphics::GraphicsSettings::default()), RenderAssetUsages);
     let h = app.ctx.res_mut::<Assets<ShaderBuffer>>().add(buf);
     let _ = FOG_BUFFER.set(h);
     app.ctx.res.insert(fog);
@@ -393,6 +393,22 @@ pub fn game_rows(t: &Transform) -> [Vec3; 3] {
 /// Game-space eye position for a Bevy transform.
 pub fn game_eye(t: &Transform) -> Vec3 { Vec3::new(t.translation.x, -t.translation.z, t.translation.y) }
 
+/// The camera rc-engine's "first `Camera3d`" queries see (`Query<&Transform, With<Camera3d>>::iter().next()`: the tfrag
+/// and tie LOD, the occlusion test, the moby animation's camera). In Bevy that is the sky camera whenever it exists
+/// (its archetype comes first): the main camera's transform and tangents, copied by `sky_render::follow_main_camera`
+/// (so a FixedUpdate reader sees last frame's), with the default far plane. Without a sky camera, the main camera.
+pub fn first_camera3d(world: &World) -> Option<(Transform, Option<Projection>)> {
+    let sky = world
+        .query::<(&Transform, Option<&Projection>)>()
+        .with::<(&Camera3d, &crate::sky_render::SkyCamera)>()
+        .iter()
+        .next()
+        .map(|(t, p)| (*t, p.cloned()));
+    sky.or_else(|| {
+        world.query::<(&Transform, Option<&Projection>)>().with::<(&Camera3d, &crate::fly_cam::FlyCam)>().iter().next().map(|(t, p)| (*t, p.cloned()))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,20 +456,4 @@ mod tests {
         assert!((proj.gs_xyz(Vec3::new(0.0, 0.0, NEAR)).z - 16776192.0).abs() < 1.0);
         assert!((proj.gs_xyz(Vec3::new(0.0, 0.0, FAR)).z - 32.0).abs() < 1.0);
     }
-}
-
-/// The camera rc-engine's "first `Camera3d`" queries see (`Query<&Transform, With<Camera3d>>::iter().next()`: the tfrag
-/// and tie LOD, the occlusion test, the moby animation's camera). In Bevy that is the sky camera whenever it exists
-/// (its archetype comes first): the main camera's transform and tangents, copied by `sky_render::follow_main_camera`
-/// (so a FixedUpdate reader sees last frame's), with the default far plane. Without a sky camera, the main camera.
-pub fn first_camera3d(world: &World) -> Option<(Transform, Option<Projection>)> {
-    let sky = world
-        .query::<(&Transform, Option<&Projection>)>()
-        .with::<(&Camera3d, &crate::sky_render::SkyCamera)>()
-        .iter()
-        .next()
-        .map(|(t, p)| (*t, p.cloned()));
-    sky.or_else(|| {
-        world.query::<(&Transform, Option<&Projection>)>().with::<(&Camera3d, &crate::fly_cam::FlyCam)>().iter().next().map(|(t, p)| (*t, p.cloned()))
-    })
 }

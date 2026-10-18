@@ -206,6 +206,9 @@ pub fn propagate(world: &mut World) {
     }
 }
 
+/// A resource insertion deferred until the borrows of a system end.
+pub type ResInsert = Box<dyn FnOnce(&mut Resources)>;
+
 #[cfg(test)]
 mod tests {
     use super::*;

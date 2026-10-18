@@ -10,14 +10,5 @@
 //! Users: the Visibomb's missile view overlay (crate::visibomb_view), the underwater tint (crate::fog_state).
 //!
 //! rc-metal: a pass is a [`FullscreenPass`] registered with the renderer (crate::render::frame), present on a camera
-//! while the camera carries the pass's component; [`uniform`] gives a component's bytes.
+//! while the camera carries the pass's component (its `uniform` gives the component's bytes).
 
-use crate::prelude::*;
-
-/// A pass component: its uniform bytes (WGSL uniform layout, binding 2 of the pass).
-pub trait PostUniform: Send + Sync + 'static {
-    fn bytes(&self) -> Vec<u8>;
-}
-
-/// The uniform of pass component `T` on camera `e`, when the camera carries it (a [`FullscreenPass::uniform`]).
-pub fn uniform<T: PostUniform>(world: &World, e: Entity) -> Option<Vec<u8>> { world.get::<&T>(e).ok().map(|t| t.bytes()) }
