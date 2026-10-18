@@ -107,7 +107,7 @@ fn local_time() -> Option<[u64; 6]> { None }
 fn config_base() -> Option<std::path::PathBuf> {
     if crate::determinism::deterministic() { return None; }
     let var = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(std::path::PathBuf::from);
-    if cfg!(target_os = "macos") {
+    if cfg!(target_vendor = "apple") {
         Some(var("HOME")?.join("Library/Application Support"))
     } else if cfg!(windows) {
         var("APPDATA")

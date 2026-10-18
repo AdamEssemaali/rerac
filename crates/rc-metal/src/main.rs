@@ -12,7 +12,7 @@ mod log;
 
 mod aa_blit;
 mod afterimage_render;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 mod app;
 mod asset_write;
 mod audio_out;
@@ -57,7 +57,7 @@ mod play_camera;
 mod pre_shadow;
 mod prelude;
 mod reactive_render;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 mod render;
 mod render_settings;
 mod reticle_render;
@@ -82,6 +82,8 @@ mod thruster_render;
 mod tie_light;
 mod tie_lod;
 mod tie_render;
+#[cfg(target_vendor = "apple")]
+mod touch_controls;
 mod title_world;
 mod travel_render;
 mod vendor_render;
@@ -112,13 +114,13 @@ struct ScreenshotRequest {
     start: std::time::Instant,
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn main() {
-    eprintln!("rerac-metal runs on macOS only (Metal); use rerac (rc-engine) elsewhere");
+    eprintln!("rerac-metal runs on macOS and iOS only (Metal); use rerac (rc-engine) elsewhere");
     std::process::exit(1);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn main() -> anyhow::Result<()> {
     crash_log::install();
     // `--version-json` exits here; a missing or wrong data folder exits with a clear error (crate::disc_source).
@@ -228,6 +230,7 @@ fn main() -> anyhow::Result<()> {
     r.fullscreen.0.push(scene_render::scene_fade_fullscreen_pass());
     r.add_hook(Hook::AfterOpaque, shadow_render::shadow_hook);
     r.add_hook(Hook::Finish, menu_render::snapshot_hook);
+    r.add_hook(Hook::Window, touch_controls::window_hook);
 
     schedule(&mut app);
     let status = app::run(app, renderer)?;

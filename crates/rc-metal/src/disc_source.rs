@@ -8,7 +8,8 @@
 //! **Data root** ([`startup`], once per process; launcher contract `docs/plan/launcher_contract.md`):
 //! 1. `--data-dir <dir>` (or `--data-dir=<dir>`), how the launcher starts the game;
 //! 2. `RC_DATA_DIR`, equivalent;
-//! 3. the development default: `RC_EXTRACTED`, else `<workspace>/extracted`.
+//! 3. the development default: `RC_EXTRACTED`, else `<workspace>/extracted` (iOS: `Documents/data` in the app's
+//!    container, the folder the Files app and the Finder show under the app; tools/package/ios.sh).
 //!
 //! The folder must exist and hold `toc.bin`. `<data>/extract-info.json` (written last by the extractor) must be
 //! present for 1 and 2, and its `data_format` must equal [`DATA_FORMAT`]; the development tree may lack it (one
@@ -81,7 +82,11 @@ fn resolve(arg: Option<PathBuf>, env_data_dir: Option<OsString>, env_extracted: 
 
 /// `<workspace>/extracted` (resolved from this crate's manifest dir at compile time, so `cargo dev` works from any
 /// cwd).
+#[cfg(not(target_os = "ios"))]
 fn dev_extracted() -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extracted") }
+
+#[cfg(target_os = "ios")]
+fn dev_extracted() -> PathBuf { nonempty(std::env::var_os("HOME")).unwrap_or_default().join("Documents/data") }
 
 /// A data-folder check failure: the process exit code and the message.
 #[derive(Debug)]

@@ -8,8 +8,11 @@
 pub mod app;
 pub mod assets;
 pub mod ecs;
+#[cfg(target_os = "ios")]
+pub mod game_controller;
 pub mod image;
 pub mod input;
 pub mod mesh;
 pub mod scene;
 pub mod time;
+pub mod touch;

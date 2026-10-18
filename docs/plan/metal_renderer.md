@@ -1,7 +1,7 @@
 # Native Metal renderer (`crates/rc-metal`)
 
 Status: **done**. The whole game (front end, title, every level, gameplay, menus, movies, audio, saves, level switching)
-runs in `rerac-metal` on Metal with no Bevy and no wgpu, frame for frame like `rerac`. Decided by the user on
+runs in `rerac-metal` on Metal with no Bevy and no wgpu, frame for frame like `rerac`, on macOS and on iOS (below). Decided by the user on
 2026-10-18 (docs/plan/decisions.md). Porting guide for later rc-engine changes: `docs/plan/metal_porting.md`.
 
 ## Why
@@ -14,7 +14,7 @@ GPU behind Bevy's phase and pipeline machinery (pipeline variants, G-REN-037).
 
 - **Own executable** `rerac-metal` (`cargo run -p rc-metal --release`), same arguments, environment variables, exit
   codes and `--version-json` as `rerac`: winit 0.30 window, `CAMetalLayer` through `raw-window-metal`, Metal through
-  `objc2-metal` 0.3, input through winit + gilrs, ECS through hecs 0.11. macOS only.
+  `objc2-metal` 0.3, input through winit + gilrs (iOS: GameController and touches), ECS through hecs 0.11.
 - **Every rc-engine module is ported under its own name** (`crates/rc-metal/src/<module>.rs`), logic, constants,
   comments and tests verbatim; only the Bevy API changed (table in `metal_porting.md`). rc-game, rc-data, rc-formats,
   rc-video and the audio code are shared unchanged.
@@ -49,6 +49,27 @@ Frame dumps of both renderers at `RC_RESOLUTION=416`, compared with `tools/metal
 
 Speed (release, no vsync, Novalis): ~3.6 ms CPU per frame (update ~1.1 ms, encode ~2.5 ms), GPU wait 0; the
 display caps it at 120 fps. `rerac` on wgpu: 159 fps.
+
+## iOS
+
+`rerac-metal` also runs on iPhone and iPad (iOS 18+, the MSL 3.2 that wgpu-hal's options ask for):
+`tools/package/ios.sh` builds `dist/ios/sim/ReRAC.app` for the Simulator, or with a signing identity and a
+provisioning profile `dist/ios/device/ReRAC.app` and `dist/ios/ReRAC.ipa` (usage in the script's header). The code is
+the macOS code; what differs:
+
+- **Window:** winit on a UIKit view, the whole screen (winit's inner size on iOS is only the safe area), landscape,
+  always synced to the display.
+- **Input:** controllers and the hardware keyboard through Apple's GameController framework
+  (`engine/game_controller.rs`; gilrs has no iOS backend), and an on-screen PS2 pad (`engine/touch.rs`, drawn by
+  `touch_controls.rs` through the renderer's `Hook::Window`). The pad is the device in use from the start and again
+  after any touch; a controller takes over once it is used (an idle one, like the Simulator's virtual controller,
+  does not).
+- **Data:** not in the bundle. Default data folder `Documents/data` in the app's container (the Finder and the Files
+  app show it; `UIFileSharingEnabled`): copy the launcher's `games/rac1/data` there. `RC_DATA_DIR` still wins
+  (Simulator: `SIMCTL_CHILD_RC_DATA_DIR`). Saves and settings go to the container's `Library/Application Support`.
+
+Checked 2026-10-18 in the iOS 26.5 Simulator (iPhone 17 Pro): front end, movies, title, gameplay with HUD at 60 fps.
+Not yet run on a physical device (no signing identity on the build machine).
 
 ## Known differences
 

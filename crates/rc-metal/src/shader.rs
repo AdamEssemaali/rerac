@@ -35,8 +35,8 @@ const ENGINE: &[(&str, &str)] = sources!("../../rc-engine/assets/shaders/":
 
 /// rc-metal's stand-ins for the Bevy shader modules (and its own shaders).
 const SHIMS: &[(&str, &str)] = sources!("../shaders/shim/":
-    "forward_io", "fullscreen_vertex_shader", "mesh_functions", "mesh_view_bindings", "sprite", "standard_unlit", "ui_vertex_output",
-    "view_transformations",
+    "forward_io", "fullscreen_vertex_shader", "mesh_functions", "mesh_view_bindings", "sprite", "standard_unlit", "touch_controls",
+    "ui_vertex_output", "view_transformations",
 );
 
 /// A shader definition: a flag (`#ifdef`) or a value (`#{NAME}`).
@@ -376,15 +376,16 @@ mod tests {
             ("shadow_resolve", gs(&[])),
             ("shadow_volume", gs(&[])),
             ("underwater_tint", gs(&[])),
+            ("touch_controls", Defs::new()),
         ];
         let mut failures = Vec::new();
-        #[cfg(target_os = "macos")]
+        #[cfg(target_vendor = "apple")]
         let device = objc2_metal::MTLCreateSystemDefaultDevice();
         for (name, d) in cases {
             match load(name, &d) {
                 Err(e) => failures.push(format!("{e:#}")),
                 // The Metal compiler accepts naga's output (when this machine has a Metal device).
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 Ok(c) => {
                     use objc2_metal::MTLDevice;
                     if let Some(dev) = device.as_ref() {
@@ -393,7 +394,7 @@ mod tests {
                         }
                     }
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(not(target_vendor = "apple"))]
                 Ok(_) => {}
             }
         }

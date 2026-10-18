@@ -385,6 +385,9 @@ pub enum Hook {
     /// After every camera (Bevy's `RenderGraphSystems::Finish`; rc-engine's menu snapshot copy). `color` / `depth` are
     /// unused there: the hook reads the images it needs from `gfx`.
     Finish,
+    /// Last, on the window's drawable (`color`, `Bgra8UnormSrgb`, the whole window as the viewport), before it is
+    /// presented: overlays of rc-metal's own (the iOS touch controls, crate::touch_controls). `depth` is unused.
+    Window,
 }
 
 /// What a hook gets: the view's targets, a fresh render pass is begun by the hook itself.
@@ -588,6 +591,24 @@ impl Renderer {
                 format: TextureFormat::Rgba8Unorm,
             };
             if let Err(e) = f(&mut hc) { eprintln!("metal: finish hook: {e:#}"); }
+        }
+        if let Some(win) = window {
+            for (h, f) in self.hooks.clone() {
+                if h != Hook::Window { continue; }
+                let mut hc = HookCtx {
+                    gfx: &mut self.gfx,
+                    ctx,
+                    cb: &cb,
+                    color: win,
+                    depth: win,
+                    view: &[],
+                    viewport: (0.0, 0.0, win.width() as f64, win.height() as f64),
+                    camera: Entity::DANGLING,
+                    samples: 1,
+                    format: TextureFormat::Bgra8UnormSrgb,
+                };
+                if let Err(e) = f(&mut hc) { eprintln!("metal: window hook: {e:#}"); }
+            }
         }
         if let Some(d) = drawable { cb.presentDrawable(d); }
         cb.commit();

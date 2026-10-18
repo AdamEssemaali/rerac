@@ -143,7 +143,7 @@ impl Iterator for MixerDecoder {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 impl rodio::Source for MixerDecoder {
     fn current_span_len(&self) -> Option<usize> { None }
     fn channels(&self) -> rodio::ChannelCount { rodio::ChannelCount::new(2).unwrap() }
@@ -191,7 +191,7 @@ pub struct AudioOut {
     fixed_sfx: bool,
     fixed_music: bool,
     /// The output device (playback stops when it is dropped); opened by [`start_output`].
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     sink: Option<rodio::MixerDeviceSink>,
 }
 
@@ -306,7 +306,7 @@ pub fn plugin(app: &mut crate::engine::app::App, data: Option<LevelAudio>) {
         trace,
         fixed_sfx: fixed_sfx.is_some(),
         fixed_music: fixed_music.is_some(),
-        #[cfg(target_os = "macos")]
+        #[cfg(target_vendor = "apple")]
         sink: None,
     });
 }
@@ -341,7 +341,7 @@ pub fn sync_options(ctx: &mut Ctx) {
 /// `MixerStream` asset; Bevy's audio opens the default device and mixes / resamples the same way).
 pub fn start_output(ctx: &mut Ctx) {
     let Some(mut out) = ctx.try_res_mut::<AudioOut>() else { return };
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     match rodio::DeviceSinkBuilder::open_default_sink() {
         Ok(mut sink) => {
             sink.log_on_drop(false);
@@ -350,7 +350,7 @@ pub fn start_output(ctx: &mut Ctx) {
         }
         Err(e) => eprintln!("audio: no output device ({e}); the mix runs without sound"),
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(target_vendor = "apple"))]
     let _ = &mut out;
 }
 

@@ -1,5 +1,6 @@
-//! The window: winit on a `CAMetalLayer`, the events fed to the input state, one engine frame and one render per redraw,
-//! and the window state the systems ask for (fullscreen, cursor, vsync) applied after each frame.
+//! The window: winit on a `CAMetalLayer` (an AppKit view on macOS, a UIKit view on iOS), the events fed to the input
+//! state (touches to the on-screen pad, crate::engine::touch), one engine frame and one render per redraw, and the
+//! window state the systems ask for (fullscreen, cursor, vsync) applied after each frame.
 
 use crate::determinism::Captures;
 use crate::engine::app::{App, Window as WindowState};
@@ -13,8 +14,9 @@ use objc2_metal::{MTLCommandBuffer, MTLDrawable, MTLTexture};
 use objc2_quartz_core::{CAMetalDrawable, CAMetalLayer};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::application::ApplicationHandler;
+#[cfg(target_os = "macos")]
 use winit::dpi::LogicalSize;
-use winit::event::{DeviceEvent, DeviceId, ElementState, MouseScrollDelta, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, MouseScrollDelta, TouchPhase, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{CursorGrabMode, Fullscreen, Window, WindowId};
@@ -46,10 +48,17 @@ struct Handler {
 impl Handler {
     fn open(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
         let title = self.app.ctx.res::<WindowState>().title.clone();
-        let window = event_loop.create_window(Window::default_attributes().with_title(title).with_inner_size(LogicalSize::new(1024.0, 768.0)))?;
-        let RawWindowHandle::AppKit(h) = window.window_handle()?.as_raw() else { anyhow::bail!("not an AppKit window") };
-        // SAFETY: the NSView belongs to `window`, which lives as long as the layer (both in `Win`).
-        let layer = unsafe { raw_window_metal::Layer::from_ns_view(h.ns_view) };
+        let attrs = Window::default_attributes().with_title(title);
+        // iOS: the window is the screen.
+        #[cfg(target_os = "macos")]
+        let attrs = attrs.with_inner_size(LogicalSize::new(1024.0, 768.0));
+        let window = event_loop.create_window(attrs)?;
+        // SAFETY: the view belongs to `window`, which lives as long as the layer (both in `Win`).
+        let layer = match window.window_handle()?.as_raw() {
+            RawWindowHandle::AppKit(h) => unsafe { raw_window_metal::Layer::from_ns_view(h.ns_view) },
+            RawWindowHandle::UiKit(h) => unsafe { raw_window_metal::Layer::from_ui_view(h.ui_view) },
+            _ => anyhow::bail!("not an AppKit or UIKit window"),
+        };
         // SAFETY: raw-window-metal hands out a retained CAMetalLayer.
         let layer: Retained<CAMetalLayer> = unsafe { Retained::from_raw(layer.into_raw().as_ptr().cast()) }.context("CAMetalLayer")?;
         layer.setDevice(Some(&self.renderer.gfx.device));
@@ -66,11 +75,16 @@ impl Handler {
     /// The drawable and the window resource follow the window's size and scale.
     fn sync_size(&mut self) {
         let Some(w) = self.win.as_ref() else { return };
+        // iOS: the layer covers the whole screen; winit's inner size is only the safe area (without the notch).
+        #[cfg(target_os = "ios")]
+        let size = w.window.outer_size();
+        #[cfg(not(target_os = "ios"))]
         let size = w.window.inner_size();
         let scale = w.window.scale_factor();
         w.layer.setContentsScale(scale);
         w.layer.setDrawableSize(CGSize { width: size.width.max(1) as f64, height: size.height.max(1) as f64 });
         let refresh = w.window.current_monitor().and_then(|m| m.refresh_rate_millihertz());
+        self.app.ctx.res_mut::<InputState>().touch.resize(glam::Vec2::new(size.width as f32, size.height as f32));
         let mut ws = self.app.ctx.res_mut::<WindowState>();
         ws.physical_size = glam::UVec2::new(size.width.max(1), size.height.max(1));
         ws.scale_factor = scale;
@@ -89,6 +103,8 @@ impl Handler {
             if w.window.set_cursor_grab(mode).is_err() && want.cursor_grabbed { let _ = w.window.set_cursor_grab(CursorGrabMode::Confined); }
         }
         if want.cursor_visible != w.applied.cursor_visible { w.window.set_cursor_visible(want.cursor_visible); }
+        // iOS always syncs to the display.
+        #[cfg(target_os = "macos")]
         if want.vsync != w.applied.vsync { w.layer.setDisplaySyncEnabled(want.vsync); }
         if want.title != w.applied.title { w.window.set_title(&want.title); }
         w.applied = want;
@@ -202,6 +218,16 @@ impl ApplicationHandler for Handler {
                     ElementState::Pressed => input.mouse.press(button),
                     ElementState::Released => input.mouse.release(button),
                 }
+            }
+            WindowEvent::Touch(t) => {
+                use crate::engine::touch::Phase;
+                let phase = match t.phase {
+                    TouchPhase::Started => Phase::Started,
+                    TouchPhase::Moved => Phase::Moved,
+                    TouchPhase::Ended | TouchPhase::Cancelled => Phase::Ended,
+                };
+                let p = glam::Vec2::new(t.location.x as f32, t.location.y as f32);
+                self.app.ctx.res_mut::<InputState>().touch.touch(t.id, phase, p);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let d = match delta {
