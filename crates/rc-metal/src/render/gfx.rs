@@ -1,8 +1,9 @@
 //! The Metal layer: device and queue, GPU mirrors of the asset stores (meshes, images, shader buffers), samplers, and
 //! render pipelines built from rc-engine's WGSL (crate::shader) and cached by their full state.
 //!
-//! One frame is in flight at a time (crate::render::frame waits for the previous frame before the CPU rewrites any
-//! buffer), so a CPU write never races the GPU and a frame is a pure function of the state it was encoded from.
+//! Up to [`FRAMES_IN_FLIGHT`] frames are in flight. The CPU never writes a buffer the GPU may still read: a changed
+//! asset gets a fresh GPU object (Metal keeps the old one alive until the frames using it complete), and bind groups name
+//! assets by id, resolved when they are bound, so they stay valid across those swaps.
 
 use crate::engine::assets::{AssetId, Assets};
 use crate::engine::image::{Image, ImageAddressMode, ImageFilterMode, ImageSamplerDescriptor, TextureDimension, TextureFormat};
@@ -28,6 +29,9 @@ pub type Encoder = ProtocolObject<dyn MTLRenderCommandEncoder>;
 pub type CommandBuffer = ProtocolObject<dyn MTLCommandBuffer>;
 
 pub const DEPTH_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
+
+/// Frames the CPU may encode ahead of the GPU.
+pub const FRAMES_IN_FLIGHT: usize = 2;
 
 pub fn ns(s: &str) -> Retained<NSString> { NSString::from_str(s) }
 
@@ -96,6 +100,8 @@ pub fn write_buffer(device: &Device, buf: &mut Retained<Buffer>, bytes: &[u8], l
 pub struct GpuMesh {
     pub vertices: Retained<Buffer>,
     pub layout: crate::engine::mesh::MeshLayout,
+    /// A hash of the layout and topology (a pipeline cache key).
+    pub layout_hash: u64,
     pub indices: Option<(Retained<Buffer>, MTLIndexType, usize)>,
     pub vertex_count: usize,
     pub topology: PrimitiveTopology,
@@ -265,8 +271,10 @@ pub struct Gfx {
     libraries: HashMap<(&'static str, Defs), Retained<ProtocolObject<dyn MTLLibrary>>>,
     pipelines: HashMap<PipelineKey, Rc<PipelineEntry>>,
     depth_states: HashMap<(CompareFunction, bool), Retained<DepthState>>,
-    /// The previous frame's command buffer (one frame in flight, module doc).
-    pub in_flight: Option<Retained<CommandBuffer>>,
+    /// The command buffers of the frames in flight, oldest first.
+    pub in_flight: std::collections::VecDeque<Retained<CommandBuffer>>,
+    /// Bumped whenever an image or buffer asset appears on or leaves the GPU (cached bind groups know which they name).
+    pub generation: u64,
 }
 
 impl Gfx {
@@ -284,13 +292,23 @@ impl Gfx {
             libraries: HashMap::new(),
             pipelines: HashMap::new(),
             depth_states: HashMap::new(),
-            in_flight: None,
+            in_flight: std::collections::VecDeque::new(),
+            generation: 0,
         })
     }
 
-    /// Waits for the previous frame (before the CPU rewrites anything the GPU may read).
+    /// Waits until fewer than [`FRAMES_IN_FLIGHT`] frames are in flight (before encoding the next).
+    pub fn wait_slot(&mut self) {
+        while self.in_flight.len() >= FRAMES_IN_FLIGHT {
+            let cb = self.in_flight.pop_front().unwrap();
+            cb.waitUntilCompleted();
+            if let Some(e) = cb.error() { eprintln!("metal: frame failed: {}", e.localizedDescription()); }
+        }
+    }
+
+    /// Waits for every frame in flight (read-backs).
     pub fn wait_idle(&mut self) {
-        if let Some(cb) = self.in_flight.take() {
+        while let Some(cb) = self.in_flight.pop_front() {
             cb.waitUntilCompleted();
             if let Some(e) = cb.error() { eprintln!("metal: frame failed: {}", e.localizedDescription()); }
         }
@@ -330,7 +348,9 @@ impl Gfx {
             self.meshes.insert(id, gm);
         }
         let (changed, removed) = images.take_changed();
+        if !removed.is_empty() { self.generation += 1; }
         for id in removed { self.images.remove(&id); }
+        let known = self.images.len();
         for id in changed {
             let Some(img) = images.get(id) else { continue };
             // A render target keeps its texture while its size and format stay (its contents are the GPU's).
@@ -342,18 +362,16 @@ impl Gfx {
             let gi = self.upload_image(img)?;
             self.images.insert(id, gi);
         }
+        if self.images.len() != known { self.generation += 1; }
         let (changed, removed) = buffers.take_changed();
+        if !removed.is_empty() { self.generation += 1; }
         for id in removed { self.buffers.remove(&id); }
         for id in changed {
             let Some(b) = buffers.get(id) else { continue };
             let bytes = b.data.as_deref().unwrap_or(&[]);
-            match self.buffers.get_mut(&id) {
-                Some(buf) => write_buffer(&self.device, buf, bytes, "shader buffer")?,
-                None => {
-                    let buf = new_buffer(&self.device, bytes, "shader buffer")?;
-                    self.buffers.insert(id, buf);
-                }
-            }
+            // A fresh buffer: the frames in flight may still read the old one (module doc).
+            let buf = new_buffer(&self.device, bytes, "shader buffer")?;
+            if self.buffers.insert(id, buf).is_none() { self.generation += 1; }
         }
         Ok(())
     }
@@ -371,7 +389,15 @@ impl Gfx {
             }
             None => None,
         };
-        Ok(GpuMesh { vertices, layout: m.layout(), indices, vertex_count: m.count_vertices(), topology: m.topology })
+        let layout = m.layout();
+        let layout_hash = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            layout.hash(&mut h);
+            m.topology.hash(&mut h);
+            h.finish()
+        };
+        Ok(GpuMesh { vertices, layout, layout_hash, indices, vertex_count: m.count_vertices(), topology: m.topology })
     }
 
     fn upload_image(&mut self, img: &Image) -> Result<GpuImage> {
@@ -580,11 +606,34 @@ pub enum Binding {
     Buffer(Retained<Buffer>),
     Texture(Retained<Texture>),
     Sampler(Rc<Retained<Sampler>>),
+    /// A shader-buffer asset's current GPU buffer (resolved when bound; [`bind_assets`]).
+    AssetBuffer(AssetId),
+    /// An image asset's current texture / its sampler (resolved when bound).
+    AssetTexture(AssetId),
+    AssetSampler(AssetId),
 }
 
+/// [`bind_assets`] without asset bindings.
+pub fn bind(enc: &Encoder, module: &Compiled, vertex_stage: bool, resources: &[(u32, u32, &Binding)]) { bind_assets(enc, module, vertex_stage, resources, None) }
+
 /// Binds `resources` (group, binding → resource) for `module` on the stage(s) that read them, and fills naga's sizes
-/// buffer. Missing bindings the shader declares are skipped (Metal then reads zero).
-pub fn bind(enc: &Encoder, module: &Compiled, vertex_stage: bool, resources: &[(u32, u32, &Binding)]) {
+/// buffer; asset bindings resolve through `gfx`. Missing bindings the shader declares are skipped (Metal then reads
+/// zero).
+pub fn bind_assets(enc: &Encoder, module: &Compiled, vertex_stage: bool, resources: &[(u32, u32, &Binding)], gfx: Option<&Gfx>) {
+    let resolved: Vec<(u32, u32, Binding)> = resources
+        .iter()
+        .filter_map(|(g, n, b)| {
+            let r = match b {
+                Binding::AssetBuffer(id) => Binding::Buffer(gfx?.buffers.get(id)?.clone()),
+                Binding::AssetTexture(id) => Binding::Texture(gfx?.images.get(id)?.texture.clone()),
+                Binding::AssetSampler(id) => Binding::Sampler(gfx?.images.get(id)?.sampler.clone()),
+                other => (*other).clone(),
+            };
+            Some((*g, *n, r))
+        })
+        .collect();
+    let resources: Vec<(u32, u32, &Binding)> = resolved.iter().map(|(g, n, b)| (*g, *n, b)).collect();
+    let resources = resources.as_slice();
     let mut sizes: Vec<u32> = Vec::new();
     for r in &module.resources {
         let Some((_, _, b)) = resources.iter().find(|(g, n, _)| *g == r.group && *n == r.binding) else {

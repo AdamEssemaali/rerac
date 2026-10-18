@@ -421,6 +421,7 @@ fn schedule(app: &mut App) {
         ("determinism::dump_frame", determinism::dump_frame),
         ("determinism::frame_screenshot", determinism::frame_screenshot),
         ("main::take_screenshot", take_screenshot),
+        ("main::test_switch", test_switch),
         ("main::report_fps", report_fps),
         ("render_settings::msaa_switch", render_settings::msaa_switch),
     ]);
@@ -630,6 +631,18 @@ fn report_fps(ctx: &mut Ctx) {
         println!("fps: {:.1}", *n as f32 / t);
         acc.0 = Some((now, 0));
     }
+}
+
+/// Update, `RC_METAL_SWITCH=<frame>:<level>` (test switch): at that update, the game's `ShipTravelTo(level)`
+/// (crate::travel_render::request_ship_travel), the planet page's travel, so a level change can be run without the menus.
+fn test_switch(ctx: &mut Ctx) {
+    static SWITCH: std::sync::OnceLock<Option<(u64, i32)>> = std::sync::OnceLock::new();
+    let Some((frame, dest)) = *SWITCH.get_or_init(|| {
+        let v = std::env::var("RC_METAL_SWITCH").ok()?;
+        let (f, l) = v.trim().split_once(':')?;
+        Some((f.parse().ok()?, l.parse().ok()?))
+    }) else { return };
+    if ctx.res::<determinism::FrameNumber>().0 == frame { travel_render::request_ship_travel(dest); }
 }
 
 /// Update, `RC_SCREENSHOT` without `RC_SCREENSHOT_FRAME`.

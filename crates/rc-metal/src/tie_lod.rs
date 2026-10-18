@@ -241,16 +241,12 @@ fn record(inp: &TieLodInput, eye: Vec3, rows: [Vec3; 3], fog: &LevelFog, force_l
 /// LevelUnload: rc-engine's `level_switch::remove::<TieLodState>`.
 pub fn unload(ctx: &mut Ctx) { ctx.res.remove::<TieLodState>(); }
 
-/// rc-metal: the main camera (`FlyCam`) explicitly; rc-engine took the first `Camera3d` (the sky camera carries the
-/// same transform and tangents, crate::sky_render::follow_main_camera).
+/// The view is rc-engine's first `Camera3d` (crate::game_camera::first_camera3d).
 pub fn update_tie_lods(ctx: &mut Ctx) {
     static LAST_PRINT: std::sync::Mutex<f32> = std::sync::Mutex::new(0.0);
     let scale = ctx.res::<crate::graphics::GraphicsSettings>().detail.lod_scale();
     let elapsed = ctx.res::<Time>().default.elapsed_secs();
-    let cam = {
-        let mut q = ctx.world.query::<(&Transform, Option<&Projection>)>().with::<&crate::fly_cam::FlyCam>();
-        q.iter().next().map(|(t, p)| (*t, p.cloned()))
-    };
+    let cam = crate::game_camera::first_camera3d(&ctx.world);
     let (Some(mut state), Some((cam, proj))) = (ctx.try_res_mut::<TieLodState>(), cam) else { return };
     let occl = ctx.try_res_mut::<crate::occlusion::OcclusionFrame>();
     let mut buffers = ctx.res_mut::<Assets<ShaderBuffer>>();

@@ -132,17 +132,17 @@ impl<'a> BindGroup<'a> {
 
     /// `#[texture(n)]`.
     pub fn texture(&mut self, n: u32, h: &Handle<Image>) {
-        match self.gfx.images.get(&h.id()) {
-            Some(i) => self.out.push((n, Binding::Texture(i.texture.clone()))),
-            None => self.missing = true,
+        match self.gfx.images.contains_key(&h.id()) {
+            true => self.out.push((n, Binding::AssetTexture(h.id()))),
+            false => self.missing = true,
         }
     }
 
     /// `#[sampler(n)]`: the image's own sampler.
     pub fn sampler(&mut self, n: u32, h: &Handle<Image>) {
-        match self.gfx.images.get(&h.id()) {
-            Some(i) => self.out.push((n, Binding::Sampler(i.sampler.clone()))),
-            None => self.missing = true,
+        match self.gfx.images.contains_key(&h.id()) {
+            true => self.out.push((n, Binding::AssetSampler(h.id()))),
+            false => self.missing = true,
         }
     }
 
@@ -154,9 +154,9 @@ impl<'a> BindGroup<'a> {
 
     /// `#[storage(n)]`.
     pub fn storage(&mut self, n: u32, h: &Handle<ShaderBuffer>) {
-        match self.gfx.buffers.get(&h.id()) {
-            Some(b) => self.out.push((n, Binding::Buffer(b.clone()))),
-            None => self.missing = true,
+        match self.gfx.buffers.contains_key(&h.id()) {
+            true => self.out.push((n, Binding::AssetBuffer(h.id()))),
+            false => self.missing = true,
         }
     }
 

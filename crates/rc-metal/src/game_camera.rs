@@ -441,3 +441,19 @@ mod tests {
         assert!((proj.gs_xyz(Vec3::new(0.0, 0.0, FAR)).z - 32.0).abs() < 1.0);
     }
 }
+
+/// The camera rc-engine's "first `Camera3d`" queries see (`Query<&Transform, With<Camera3d>>::iter().next()`: the tfrag
+/// and tie LOD, the occlusion test, the moby animation's camera). In Bevy that is the sky camera whenever it exists
+/// (its archetype comes first): the main camera's transform and tangents, copied by `sky_render::follow_main_camera`
+/// (so a FixedUpdate reader sees last frame's), with the default far plane. Without a sky camera, the main camera.
+pub fn first_camera3d(world: &World) -> Option<(Transform, Option<Projection>)> {
+    let sky = world
+        .query::<(&Transform, Option<&Projection>)>()
+        .with::<(&Camera3d, &crate::sky_render::SkyCamera)>()
+        .iter()
+        .next()
+        .map(|(t, p)| (*t, p.cloned()));
+    sky.or_else(|| {
+        world.query::<(&Transform, Option<&Projection>)>().with::<(&Camera3d, &crate::fly_cam::FlyCam)>().iter().next().map(|(t, p)| (*t, p.cloned()))
+    })
+}

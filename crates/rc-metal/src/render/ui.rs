@@ -148,8 +148,8 @@ fn draw_material<M: UiMaterial>(uc: &mut UiCtx, e: Entity, rect: Vec4) -> Result
     let mut res: Vec<(u32, u32, &Binding)> = vec![(3, 0, &quad)];
     res.extend(bindings.iter().map(|(n, b)| (1, *n, b)));
     uc.enc.setRenderPipelineState(&p.state);
-    bind(uc.enc, &p.vertex, true, &res);
-    if let Some(f) = &p.fragment { bind(uc.enc, f, false, &res); }
+    crate::render::gfx::bind_assets(uc.enc, &p.vertex, true, &res, Some(uc.gfx));
+    if let Some(f) = &p.fragment { crate::render::gfx::bind_assets(uc.enc, f, false, &res, Some(uc.gfx)); }
     // SAFETY: four vertices of the stand-in's quad.
     unsafe { uc.enc.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::TriangleStrip, 0, 4) };
     Ok(())

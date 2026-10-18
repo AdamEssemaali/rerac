@@ -263,8 +263,7 @@ fn tfrag_proc(info: &TfragCullInfo, t: &Tfrag, cam: Vec3, rows: [Vec3; 3], thres
     t.draw_mode(p.z, thresholds).mscal() as u32
 }
 
-/// PostUpdate, after the occlusion update. The view is the main camera's (rc-engine took the first `Camera3d`, which is
-/// the main one: the sky camera copies its transform).
+/// PostUpdate, after the occlusion update. The view is rc-engine's first `Camera3d` (crate::game_camera::first_camera3d).
 pub fn update_tfrag_modes(ctx: &mut Ctx) {
     let Some(mut state) = ctx.try_res_mut::<TfragLodState>() else { return };
     let mut occl = ctx.try_res_mut::<crate::occlusion::OcclusionFrame>();
@@ -272,8 +271,9 @@ pub fn update_tfrag_modes(ctx: &mut Ctx) {
     let (time, gfx) = (ctx.res::<Time>(), ctx.res::<crate::graphics::GraphicsSettings>());
     if !ctx.has::<ModesLocal>() { return; }
     let mut last_print = ctx.res_mut::<ModesLocal>();
-    let mut q = ctx.world.query::<(&Transform, Option<&Projection>)>().with::<&crate::fly_cam::FlyCam>();
-    let Some((cam, proj)) = q.iter().next() else { return };
+    // rc-engine's "first Camera3d" (crate::game_camera::first_camera3d).
+    let Some((cam, proj)) = crate::game_camera::first_camera3d(&ctx.world) else { return };
+    let (cam, proj) = (&cam, proj.as_ref());
     // The Detail distance option (crate::graphics) scales the thresholds `trunc(D·1024)`; ×1 is the game's exactly.
     let scale = gfx.detail.lod_scale();
     let thresholds = if scale == 1.0 { state.thresholds } else { state.block.lod_distances().map(|d| (d * scale * 1024.0) as i32) };

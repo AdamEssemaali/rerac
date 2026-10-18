@@ -135,10 +135,9 @@ fn report(level: &LoadedLevel, mode: OcclusionMode, freeze: bool) {
 /// Fallback 0 (`0x15f608` is cleared at the end of every frame render), else the value a tick set for its frame (1 the
 /// Visibomb's missile, 2 `UpdateModeFreeze` and Gemlik's exploding ship: crate::visibomb_view::occlusion_fallback),
 /// debug camera off (`0x16c4ec` = 0 in play).
-/// rc-metal: the main camera (`FlyCam`) explicitly; rc-engine took the first `Camera3d`, which the sky camera shadows
-/// with the same transform (crate::sky_render::follow_main_camera).
+/// The view is rc-engine's first `Camera3d` (crate::game_camera::first_camera3d).
 pub fn update_occlusion(ctx: &mut Ctx) {
-    let cam = ctx.world.query::<&Transform>().with::<&crate::fly_cam::FlyCam>().iter().next().copied();
+    let cam = crate::game_camera::first_camera3d(&ctx.world).map(|(t, _)| t);
     let (Some(mut f), Some(cam)) = (ctx.try_res_mut::<OcclusionFrame>(), cam) else { return };
     let level = ctx.res::<crate::Level>();
     let play = ctx.try_res::<crate::gameplay::Play>();

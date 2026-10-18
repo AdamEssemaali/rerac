@@ -89,8 +89,10 @@ fn view_uniform(clip_from_view: Mat4, world_from_view: Mat4, viewport: Vec4) -> 
 struct Item {
     pipeline: Rc<CachedPipeline>,
     mesh: AssetId,
-    instance: u32,
-    bindings: Vec<(u32, Binding)>,
+    /// The mesh instance record (`world_from_local`, `MeshTag`), written in draw order.
+    transform: Mat4,
+    tag: u32,
+    bindings: Rc<Vec<(u32, Binding)>>,
     phase: Phase,
     /// Transparent3d sort key (view z of the mesh AABB centre + depth bias).
     distance: f32,
@@ -103,11 +105,13 @@ struct Item {
 /// What a material type contributes to a 3D view.
 trait MaterialKind3d {
     fn sync(&mut self, ctx: &Ctx);
-    fn collect(&mut self, ctx: &Ctx, gfx: &mut Gfx, view: &ViewInfo, serial: &mut u64, out: &mut Vec<Item>, instances: &mut Vec<u8>);
+    fn collect(&mut self, ctx: &Ctx, gfx: &mut Gfx, view: &ViewInfo, serial: &mut u64, out: &mut Vec<Item>);
 }
 
 struct Kind3d<M: Material> {
     cache: HashMap<(AssetId, u64, TextureFormat, u32), Rc<CachedPipeline>>,
+    /// Per material: its bind group, valid while the GPU objects it names stay (`Gfx::generation`).
+    bindings: HashMap<AssetId, (u64, Rc<Vec<(u32, Binding)>>)>,
     _m: PhantomData<M>,
 }
 
@@ -147,9 +151,10 @@ impl<M: Material> MaterialKind3d for Kind3d<M> {
         let (changed, removed) = mats.take_changed();
         if changed.is_empty() && removed.is_empty() { return; }
         self.cache.retain(|k, _| !changed.contains(&k.0) && !removed.contains(&k.0));
+        for id in changed.iter().chain(&removed) { self.bindings.remove(id); }
     }
 
-    fn collect(&mut self, ctx: &Ctx, gfx: &mut Gfx, view: &ViewInfo, serial: &mut u64, out: &mut Vec<Item>, instances: &mut Vec<u8>) {
+    fn collect(&mut self, ctx: &Ctx, gfx: &mut Gfx, view: &ViewInfo, serial: &mut u64, out: &mut Vec<Item>) {
         let Some(mats) = ctx.try_res::<Assets<M>>() else { return };
         let meshes = ctx.res::<Assets<Mesh>>();
         let mut q = ctx.world.query::<(
@@ -169,14 +174,7 @@ impl<M: Material> MaterialKind3d for Kind3d<M> {
             if !layers.cloned().unwrap_or_default().intersects(&view.layers) { continue; }
             let Some(m) = mats.get(&mat.0) else { continue };
             let Some(gm) = gfx.meshes.get(&mesh.0.id()) else { continue };
-            let layout_hash = {
-                use std::hash::{Hash, Hasher};
-                let mut h = std::collections::hash_map::DefaultHasher::new();
-                gm.layout.hash(&mut h);
-                gm.topology.hash(&mut h);
-                m.pipeline_key().hash(&mut h);
-                h.finish()
-            };
+            let layout_hash = gm.layout_hash ^ m.pipeline_key().wrapping_mul(0x9e37_79b9_7f4a_7c15);
             let key = (mat.0.id(), layout_hash, view.format, view.samples);
             let pipeline = match self.cache.get(&key) {
                 Some(p) => p.clone(),
@@ -227,9 +225,17 @@ impl<M: Material> MaterialKind3d for Kind3d<M> {
                     p
                 }
             };
-            let mut bg = BindGroup::new(gfx);
-            m.bindings(&mut bg);
-            let Some(bindings) = bg.into_bindings() else { continue };
+            let bindings = match self.bindings.get(&mat.0.id()) {
+                Some((g, b)) if *g == gfx.generation => b.clone(),
+                _ => {
+                    let mut bg = BindGroup::new(gfx);
+                    m.bindings(&mut bg);
+                    let Some(b) = bg.into_bindings() else { continue };
+                    let b = Rc::new(b);
+                    self.bindings.insert(mat.0.id(), (gfx.generation, b.clone()));
+                    b
+                }
+            };
             let phase = m.alpha_mode().phase();
             let distance = if phase == Phase::Transparent {
                 let centre = meshes.get(&mesh.0).map(aabb_center).unwrap_or(Vec3::ZERO);
@@ -238,12 +244,11 @@ impl<M: Material> MaterialKind3d for Kind3d<M> {
             } else {
                 0.0
             };
-            let instance = (instances.len() / 80) as u32;
-            instance_record(gt.to_matrix(), tag.map_or(0, |t| t.0), instances);
             out.push(Item {
                 pipeline,
                 mesh: mesh.0.id(),
-                instance,
+                transform: gt.to_matrix(),
+                tag: tag.map_or(0, |t| t.0),
                 bindings,
                 phase,
                 distance,
@@ -481,8 +486,12 @@ pub struct Renderer {
     pub fullscreen: FullscreenPasses,
     pub ui: Option<UiDrawFn>,
     quad: QuadDrawer,
-    /// Instance and view buffers reused frame to frame.
-    instance_buffers: Vec<Retained<gfx::Buffer>>,
+    /// Instance buffers per frame slot, reused once that slot's frame has completed.
+    instance_buffers: [Vec<Retained<gfx::Buffer>>; gfx::FRAMES_IN_FLIGHT],
+    /// How long the last render waited for the previous frame's GPU work.
+    pub last_wait: std::time::Duration,
+    /// This frame's slot among the frames in flight (its instance buffers).
+    frame_slot: usize,
 }
 
 impl Renderer {
@@ -499,7 +508,9 @@ impl Renderer {
             fullscreen: FullscreenPasses::default(),
             ui: None,
             quad: QuadDrawer { white: None },
-            instance_buffers: Vec::new(),
+            instance_buffers: Default::default(),
+            last_wait: std::time::Duration::ZERO,
+            frame_slot: 0,
         })
     }
 
@@ -507,7 +518,7 @@ impl Renderer {
     pub fn add_material<M: Material>(&mut self, ctx: &mut Ctx) {
         ctx.res.init::<Assets<M>>();
         if self.kinds3d.iter().any(|(t, _)| *t == TypeId::of::<M>()) { return; }
-        self.kinds3d.push((TypeId::of::<M>(), Box::new(Kind3d::<M> { cache: HashMap::new(), _m: PhantomData })));
+        self.kinds3d.push((TypeId::of::<M>(), Box::new(Kind3d::<M> { cache: HashMap::new(), bindings: HashMap::new(), _m: PhantomData })));
     }
 
     /// Bevy's `Material2dPlugin::<M>`.
@@ -521,7 +532,10 @@ impl Renderer {
 
     /// Renders every camera. `window`: the drawable's texture (cameras targeting the window), if presenting.
     pub fn render(&mut self, ctx: &mut Ctx, window: Option<&Texture>, drawable: Option<&ProtocolObject<dyn MTLDrawable>>) -> Result<Retained<CommandBuffer>> {
-        self.gfx.wait_idle();
+        let tw = std::time::Instant::now();
+        self.gfx.wait_slot();
+        self.last_wait = tw.elapsed();
+        self.frame_slot = (self.frame_slot + 1) % gfx::FRAMES_IN_FLIGHT;
         if self.quad.white.is_none() {
             let h = ctx.res_mut::<Assets<Image>>().add(Image::default());
             self.quad.white = Some(h);
@@ -569,18 +583,20 @@ impl Renderer {
         }
         if let Some(d) = drawable { cb.presentDrawable(d); }
         cb.commit();
-        self.gfx.in_flight = Some(cb.clone());
+        self.gfx.in_flight.push_back(cb.clone());
         Ok(cb)
     }
 
     fn buffer_for(&mut self, idx: &mut usize, bytes: &[u8]) -> Result<Retained<gfx::Buffer>> {
-        if *idx >= self.instance_buffers.len() { self.instance_buffers.push(gfx::new_buffer(&self.gfx.device, bytes, "mesh instances")?); } else {
-            let mut b = self.instance_buffers[*idx].clone();
+        let list = &mut self.instance_buffers[self.frame_slot];
+        if *idx >= list.len() { list.push(gfx::new_buffer(&self.gfx.device, bytes, "mesh instances")?); } else {
+            // This slot's previous frame has completed (`wait_slot`): its buffer can be rewritten.
+            let mut b = list[*idx].clone();
             gfx::write_buffer(&self.gfx.device, &mut b, bytes, "mesh instances")?;
-            self.instance_buffers[*idx] = b;
+            list[*idx] = b;
         }
         *idx += 1;
-        Ok(self.instance_buffers[*idx - 1].clone())
+        Ok(list[*idx - 1].clone())
     }
 
     fn render_camera(&mut self, ctx: &Ctx, cb: &CommandBuffer, cam: Entity, window: Option<&Texture>, used: &mut usize) -> Result<()> {
@@ -672,10 +688,8 @@ impl Renderer {
             let depth_tex = self.depth[&dkey].clone();
 
             let mut items = Vec::new();
-            let mut instances = Vec::new();
             let serial = &mut self.serial;
-            for (_, k) in &mut self.kinds3d { k.collect(ctx, &mut self.gfx, &view_info, serial, &mut items, &mut instances); }
-            let inst_buf = self.buffer_for(used, &instances)?;
+            for (_, k) in &mut self.kinds3d { k.collect(ctx, &mut self.gfx, &view_info, serial, &mut items); }
 
             // Phases.
             let mut opaque: Vec<&Item> = items.iter().filter(|i| i.phase == Phase::Opaque).collect();
@@ -691,6 +705,14 @@ impl Renderer {
             let rest: Vec<&Item> = transparent.iter().copied().filter(|i| i.before_shadows.is_none()).collect();
             let main_b: Vec<&Item> = rest.iter().copied().filter(|i| !i.effect).collect();
             let effects: Vec<&Item> = rest.iter().copied().filter(|i| i.effect).collect();
+            // The instance records in draw order; consecutive items of one pipeline, bind group and mesh become one
+            // instanced draw (Bevy's batching).
+            let mut instances = Vec::with_capacity(items.len() * 80);
+            let seq_a: Vec<&Item> = opaque.iter().chain(mask.iter()).chain(pre.iter()).copied().collect();
+            let batches_a = batch(&seq_a, &mut instances);
+            let batches_b = batch(&main_b, &mut instances);
+            let batches_e = batch(&effects, &mut instances);
+            let inst_buf = self.buffer_for(used, &instances)?;
 
             // Pass A.
             let rpd = MTLRenderPassDescriptor::renderPassDescriptor();
@@ -707,7 +729,7 @@ impl Renderer {
             da.setStoreAction(MTLStoreAction::Store);
             let enc = cb.renderCommandEncoderWithDescriptor(&rpd).context("render encoder")?;
             enc.setViewport(viewport);
-            self.draw_items(&enc, &view_bytes, &inst_buf, opaque.iter().chain(mask.iter()).chain(pre.iter()).copied());
+            self.draw_items(&enc, &view_bytes, &inst_buf, &batches_a);
             enc.endEncoding();
 
             for (h, f) in self.hooks.clone() {
@@ -737,18 +759,19 @@ impl Renderer {
             da.setStoreAction(MTLStoreAction::Store);
             let enc = cb.renderCommandEncoderWithDescriptor(&rpd).context("render encoder")?;
             enc.setViewport(viewport);
-            self.draw_items(&enc, &view_bytes, &inst_buf, main_b.iter().copied());
+            self.draw_items(&enc, &view_bytes, &inst_buf, &batches_b);
             enc.endEncoding();
 
             // `RC_METAL_ITEMS=<frame>`: the view's transparent items of that frame (diagnostics).
             if std::env::var("RC_METAL_ITEMS").ok().and_then(|v| v.parse::<u64>().ok()) == ctx.try_res::<crate::determinism::FrameNumber>().map(|f| f.0) {
+                println!("ITEMS opaque {} mask {} pre {} transparent {} effects {}", opaque.len(), mask.len(), pre.len(), main_b.len(), effects.len());
                 for (k, it) in rest.iter().enumerate() {
                     let name = ctx.world.get::<&Name>(it.entity).map(|n| n.0.clone()).unwrap_or_default();
                     println!("ITEM {k} cam {cam:?} effect {} dist {:.3} ent {} pipe {} {name}", it.effect, it.distance, it.entity.to_bits(), it.pipeline.serial);
                 }
             }
             if !effects.is_empty() {
-                self.effect_pass(cb, &target_tex, &depth_tex, samples, format, viewport, &view_bytes, &inst_buf, &effects)?;
+                self.effect_pass(cb, &target_tex, &depth_tex, samples, format, viewport, &view_bytes, &inst_buf, &batches_e)?;
             }
         } else {
             // Core2d: Transparent2d (Mesh2d materials) by z then entity, then the sprites.
@@ -769,9 +792,9 @@ impl Renderer {
                 enc.setRenderPipelineState(&it.pipeline.entry.state);
                 let mut res: Vec<(u32, u32, &Binding)> = vec![(0, 0, &view_b), (1, 0, &inst_b)];
                 res.extend(it.bindings.iter().map(|(n, b)| (2, *n, b)));
-                bind(&enc, &it.pipeline.entry.vertex, true, &res);
-                if let Some(f) = &it.pipeline.entry.fragment { bind(&enc, f, false, &res); }
-                draw_mesh(&enc, gm, it.instance);
+                gfx::bind_assets(&enc, &it.pipeline.entry.vertex, true, &res, Some(&self.gfx));
+                if let Some(f) = &it.pipeline.entry.fragment { gfx::bind_assets(&enc, f, false, &res, Some(&self.gfx)); }
+                draw_mesh(&enc, gm, it.instance, 1);
             }
             // Sprites (a 2D camera's world: one unit per pixel, origin at the centre).
             let sprites: Vec<(Handle<Image>, Vec2, Color, GlobalTransform, Entity)> = ctx
@@ -832,14 +855,17 @@ impl Renderer {
         Ok(())
     }
 
-    fn draw_items<'a>(&self, enc: &Encoder, view: &[u8], inst: &Retained<gfx::Buffer>, items: impl Iterator<Item = &'a Item>) {
+    fn draw_items(&self, enc: &Encoder, view: &[u8], inst: &Retained<gfx::Buffer>, batches: &[Batch<'_>]) {
         let view_b = Binding::Bytes(Rc::new(view.to_vec()));
         let inst_b = Binding::Buffer(inst.clone());
         let mut last_pipeline: *const CachedPipeline = std::ptr::null();
-        for it in items {
+        let mut last_bindings: *const Vec<(u32, Binding)> = std::ptr::null();
+        for b in batches {
+            let it = b.item;
             let Some(gm) = self.gfx.meshes.get(&it.mesh) else { continue };
             let p = &*it.pipeline;
-            if !std::ptr::eq(last_pipeline, p) {
+            let pipeline_changed = !std::ptr::eq(last_pipeline, p);
+            if pipeline_changed {
                 enc.setRenderPipelineState(&p.entry.state);
                 enc.setDepthStencilState(Some(&p.depth));
                 enc.setFrontFacingWinding(MTLWinding::CounterClockwise);
@@ -850,11 +876,15 @@ impl Renderer {
                 });
                 last_pipeline = p;
             }
-            let mut res: Vec<(u32, u32, &Binding)> = vec![(0, 0, &view_b), (1, 0, &inst_b)];
-            res.extend(it.bindings.iter().map(|(n, b)| (2, *n, b)));
-            bind(enc, &p.entry.vertex, true, &res);
-            if let Some(f) = &p.entry.fragment { bind(enc, f, false, &res); }
-            draw_mesh(enc, gm, it.instance);
+            // The same bind group under the same pipeline is still bound.
+            if pipeline_changed || !std::ptr::eq(last_bindings, Rc::as_ptr(&it.bindings)) {
+                let mut res: Vec<(u32, u32, &Binding)> = vec![(0, 0, &view_b), (1, 0, &inst_b)];
+                res.extend(it.bindings.iter().map(|(n, b)| (2, *n, b)));
+                gfx::bind_assets(enc, &p.entry.vertex, true, &res, Some(&self.gfx));
+                if let Some(f) = &p.entry.fragment { gfx::bind_assets(enc, f, false, &res, Some(&self.gfx)); }
+                last_bindings = Rc::as_ptr(&it.bindings);
+            }
+            draw_mesh(enc, gm, b.first, b.count);
         }
     }
 
@@ -887,7 +917,7 @@ impl Renderer {
         viewport: MTLViewport,
         view: &[u8],
         inst: &Retained<gfx::Buffer>,
-        effects: &[&Item],
+        effects: &[Batch<'_>],
     ) -> Result<()> {
         let (w, h) = (target.width() as u32, target.height() as u32);
         let eff = self.scratch(w, h, TextureFormat::Rgba8Unorm)?;
@@ -916,7 +946,7 @@ impl Renderer {
         da.setStoreAction(MTLStoreAction::Store);
         let enc = cb.renderCommandEncoderWithDescriptor(&rpd).context("render encoder")?;
         enc.setViewport(viewport);
-        self.draw_items(&enc, view, inst, effects.iter().copied());
+        self.draw_items(&enc, view, inst, effects);
         enc.endEncoding();
         // 3. Back into the frame.
         let msaa_target = if samples > 1 { self.msaa.iter().find(|(k, _)| k.1 == w && k.2 == h && k.3 == samples && k.4 == format).map(|(_, t)| t.clone()) } else { None };
@@ -1037,16 +1067,42 @@ impl Renderer {
     }
 }
 
-fn draw_mesh(enc: &Encoder, gm: &gfx::GpuMesh, instance: u32) {
+/// Consecutive draws of one pipeline, bind group and mesh: one instanced draw of `count` records from `first`.
+struct Batch<'a> {
+    item: &'a Item,
+    first: u32,
+    count: u32,
+}
+
+/// Writes the items' instance records (in order) and merges runs of one pipeline, bind group and mesh.
+fn batch<'a>(items: &[&'a Item], records: &mut Vec<u8>) -> Vec<Batch<'a>> {
+    let mut out: Vec<Batch<'a>> = Vec::new();
+    for it in items {
+        let index = (records.len() / 80) as u32;
+        instance_record(it.transform, it.tag, records);
+        if let Some(last) = out.last_mut() {
+            let l = last.item;
+            if Rc::ptr_eq(&l.pipeline, &it.pipeline) && Rc::ptr_eq(&l.bindings, &it.bindings) && l.mesh == it.mesh && last.first + last.count == index {
+                last.count += 1;
+                continue;
+            }
+        }
+        out.push(Batch { item: it, first: index, count: 1 });
+    }
+    out
+}
+
+fn draw_mesh(enc: &Encoder, gm: &gfx::GpuMesh, first: u32, count: u32) {
     let prim = gfx::primitive(gm.topology);
-    // SAFETY: the mesh's own buffers; one instance at `instance` (the shader reads its record through instance_index).
+    // SAFETY: the mesh's own buffers; `count` instances from record `first` (the shader reads each record through
+    // instance_index, which includes the base instance).
     unsafe {
         enc.setVertexBuffer_offset_atIndex(Some(&gm.vertices), 0, crate::shader::VERTEX_BUFFER_BASE as usize);
         match &gm.indices {
             Some((buf, ty, n)) => enc.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset_instanceCount_baseVertex_baseInstance(
-                prim, *n, *ty, buf, 0, 1, 0, instance as usize,
+                prim, *n, *ty, buf, 0, count as usize, 0, first as usize,
             ),
-            None => enc.drawPrimitives_vertexStart_vertexCount_instanceCount_baseInstance(prim, 0, gm.vertex_count, 1, instance as usize),
+            None => enc.drawPrimitives_vertexStart_vertexCount_instanceCount_baseInstance(prim, 0, gm.vertex_count, count as usize, first as usize),
         }
     }
 }

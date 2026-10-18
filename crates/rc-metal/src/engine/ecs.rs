@@ -162,9 +162,17 @@ pub fn propagate(world: &mut World) {
         .collect();
     for e in missing { let _ = world.insert(e, (Visibility::Inherited, InheritedVisibility(true), ViewVisibility(true))); }
 
-    // Roots first, then children in depth order (the hierarchies are shallow: a few levels at most).
+    // Roots (no parent: nearly every entity) in one pass each.
+    for (t, g) in world.query_mut::<(&Transform, &mut GlobalTransform)>().without::<&ChildOf>() { *g = GlobalTransform::from(*t); }
+    for (v, iv, vv) in world.query_mut::<(&Visibility, &mut InheritedVisibility, &mut ViewVisibility)>().without::<&ChildOf>() {
+        let visible = *v != Visibility::Hidden;
+        iv.0 = visible;
+        vv.0 = visible;
+    }
+    // Children (the few hierarchies: Ratchet's LOD groups, the UI) in depth order, parents before children.
     let mut parent_of: HashMap<Entity, Entity> = HashMap::new();
     for (e, c) in world.query::<(Entity, &ChildOf)>().iter() { parent_of.insert(e, c.0); }
+    if parent_of.is_empty() { return; }
     let depth = |mut e: Entity| {
         let mut d = 0;
         while let Some(&p) = parent_of.get(&e) {
@@ -174,28 +182,27 @@ pub fn propagate(world: &mut World) {
         }
         d
     };
-    let mut order: Vec<(usize, Entity)> = world.query::<(Entity, &Transform)>().iter().map(|(e, _)| (depth(e), e)).collect();
-    let mut vis_order: Vec<(usize, Entity)> = world.query::<(Entity, &Visibility)>().iter().map(|(e, _)| (depth(e), e)).collect();
+    let mut order: Vec<(usize, Entity)> = parent_of.keys().map(|&e| (depth(e), e)).collect();
     order.sort_by_key(|(d, e)| (*d, e.to_bits()));
-    vis_order.sort_by_key(|(d, e)| (*d, e.to_bits()));
     for (_, e) in order {
-        let local = *world.get::<&Transform>(e).unwrap();
-        let g = match parent_of.get(&e).and_then(|p| world.get::<&GlobalTransform>(*p).ok().map(|g| *g)) {
-            Some(pg) => pg.mul_transform(local),
-            None => GlobalTransform::from(local),
-        };
-        if let Ok(mut gt) = world.get::<&mut GlobalTransform>(e) { *gt = g; }
-    }
-    for (_, e) in vis_order {
-        let v = *world.get::<&Visibility>(e).unwrap();
-        let parent_visible = parent_of.get(&e).and_then(|p| world.get::<&InheritedVisibility>(*p).ok().map(|i| i.0)).unwrap_or(true);
-        let visible = match v {
-            Visibility::Hidden => false,
-            Visibility::Visible => true,
-            Visibility::Inherited => parent_visible,
-        };
-        if let Ok(mut iv) = world.get::<&mut InheritedVisibility>(e) { iv.0 = visible; }
-        if let Ok(mut vv) = world.get::<&mut ViewVisibility>(e) { vv.0 = visible; }
+        let p = parent_of[&e];
+        if let Ok(local) = world.get::<&Transform>(e).map(|t| *t) {
+            let g = match world.get::<&GlobalTransform>(p).ok().map(|g| *g) {
+                Some(pg) => pg.mul_transform(local),
+                None => GlobalTransform::from(local),
+            };
+            if let Ok(mut gt) = world.get::<&mut GlobalTransform>(e) { *gt = g; }
+        }
+        if let Ok(v) = world.get::<&Visibility>(e).map(|v| *v) {
+            let parent_visible = world.get::<&InheritedVisibility>(p).map_or(true, |i| i.0);
+            let visible = match v {
+                Visibility::Hidden => false,
+                Visibility::Visible => true,
+                Visibility::Inherited => parent_visible,
+            };
+            if let Ok(mut iv) = world.get::<&mut InheritedVisibility>(e) { iv.0 = visible; }
+            if let Ok(mut vv) = world.get::<&mut ViewVisibility>(e) { vv.0 = visible; }
+        }
     }
 }
 

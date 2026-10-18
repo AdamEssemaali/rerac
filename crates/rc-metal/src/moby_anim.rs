@@ -189,8 +189,9 @@ pub fn tick(ctx: &mut Ctx) {
     if !anim.enabled { return; }
     let level = ctx.res::<crate::Level>();
     let classes = &level.0.mobys.anim;
-    // "The" Camera3d: the main camera (rc-engine took the first Camera3d, the sky camera follows the main one).
-    let camera = ctx.world.query::<&Transform>().with::<&Camera3d>().with::<&crate::fly_cam::FlyCam>().iter().next().map(crate::game_camera::game_eye);
+    // rc-engine's first Camera3d (crate::game_camera::first_camera3d: in FixedUpdate the sky camera still has last frame's
+    // transform).
+    let camera = crate::game_camera::first_camera3d(&ctx.world).map(|(t, _)| crate::game_camera::game_eye(&t));
     let a = &mut *anim;
     for (k, i) in a.instances.iter_mut().enumerate() {
         if !i.state.skip_advance { moby_anim::advance(&mut i.state, &classes[i.class]); }

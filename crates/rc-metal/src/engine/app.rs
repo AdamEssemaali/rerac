@@ -147,7 +147,16 @@ impl App {
 
     fn run(&mut self, stage: Stage) {
         let list = self.schedules.list(stage).to_vec();
-        for (_, f) in list { self.ctx.run(f); }
+        let prof = profiling();
+        for (name, f) in list {
+            if prof {
+                let t = std::time::Instant::now();
+                self.ctx.run(f);
+                record(name, t.elapsed());
+            } else {
+                self.ctx.run(f);
+            }
+        }
     }
 
     /// One frame of the main world (the render follows, by the caller).
@@ -183,6 +192,28 @@ impl App {
     pub fn end_frame_input(&mut self) { self.ctx.res_mut::<InputState>().begin_frame(); }
 
     pub fn exit_status(&self) -> Option<i32> { self.ctx.res::<AppExit>().0 }
+}
+
+/// `RC_METAL_PROFILE=1`: per-system times, the slowest printed every 5 s.
+fn profiling() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RC_METAL_PROFILE").is_ok_and(|v| v.trim() == "1"))
+}
+
+fn record(name: &'static str, d: std::time::Duration) {
+    use std::sync::Mutex;
+    static ACC: Mutex<Option<(std::time::Instant, HashMap<&'static str, f64>)>> = Mutex::new(None);
+    let mut a = ACC.lock().unwrap();
+    let e = a.get_or_insert_with(|| (std::time::Instant::now(), HashMap::new()));
+    *e.1.entry(name).or_default() += d.as_secs_f64();
+    if e.0.elapsed().as_secs_f32() >= 5.0 {
+        let secs = e.0.elapsed().as_secs_f64();
+        let mut v: Vec<_> = e.1.iter().map(|(k, t)| (*k, *t)).collect();
+        v.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let top: Vec<String> = v.iter().take(12).map(|(k, t)| format!("{k} {:.2}%", 100.0 * t / secs)).collect();
+        println!("profile systems (share of wall time): {}", top.join(", "));
+        *e = (std::time::Instant::now(), HashMap::new());
+    }
 }
 
 /// Bevy's `Time::begin_frame` from the pace's step count: call from First after the pace system (crate::frame_pace).

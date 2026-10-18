@@ -95,8 +95,10 @@ impl Handler {
     }
 
     fn frame(&mut self) -> Result<()> {
+        let t0 = std::time::Instant::now();
         self.sync_size();
         self.app.update();
+        let t_update = t0.elapsed();
         self.app.end_frame_input();
         self.apply_window();
         let Some(w) = self.win.as_ref() else { return Ok(()) };
@@ -106,7 +108,9 @@ impl Handler {
             let drawable = layer.nextDrawable();
             let texture = drawable.as_ref().map(|d| d.texture());
             let present: Option<&ProtocolObject<dyn MTLDrawable>> = drawable.as_deref().map(ProtocolObject::from_ref);
+            let t1 = std::time::Instant::now();
             let cb = self.renderer.render(&mut self.app.ctx, texture.as_deref(), present)?;
+            profile(t_update, t1.elapsed(), self.renderer.last_wait);
             if !captures.is_empty() {
                 cb.waitUntilCompleted();
                 for c in captures {
@@ -123,6 +127,25 @@ impl Handler {
             Ok(())
         })?;
         Ok(())
+    }
+}
+
+/// `RC_METAL_PROFILE=1`: the mean update, render (encode, after the wait) and wait times over 5 s.
+fn profile(update: std::time::Duration, render: std::time::Duration, wait: std::time::Duration) {
+    use std::sync::Mutex;
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var("RC_METAL_PROFILE").is_ok_and(|v| v.trim() == "1")) { return; }
+    static ACC: Mutex<Option<(std::time::Instant, u32, f64, f64, f64)>> = Mutex::new(None);
+    let mut a = ACC.lock().unwrap();
+    let e = a.get_or_insert((std::time::Instant::now(), 0, 0.0, 0.0, 0.0));
+    e.1 += 1;
+    e.2 += update.as_secs_f64();
+    e.3 += (render - wait.min(render)).as_secs_f64();
+    e.4 += wait.as_secs_f64();
+    if e.0.elapsed().as_secs_f32() >= 5.0 {
+        let n = e.1 as f64;
+        println!("profile: {} frames: update {:.2} ms, encode {:.2} ms, wait {:.2} ms", e.1, e.2 / n * 1e3, e.3 / n * 1e3, e.4 / n * 1e3);
+        *e = (std::time::Instant::now(), 0, 0.0, 0.0, 0.0);
     }
 }
 
