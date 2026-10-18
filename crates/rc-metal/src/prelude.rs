@@ -12,7 +12,8 @@ pub use crate::engine::mesh::{
 };
 pub use crate::engine::scene::{
     Camera, Camera2d, Camera3d, CameraProjection, ChildOf, ClearColor, ClearColorConfig, Color, CustomProjection, GlobalTransform,
-    InheritedVisibility, Msaa, Name, NoFrustumCulling, Projection, RenderLayers, RenderTarget, Transform, ViewVisibility, Viewport, Visibility,
+    InheritedVisibility, Msaa, Name, NoFrustumCulling, Projection, RenderLayers, RenderTarget, SubCameraView, Transform, ViewVisibility, Viewport,
+    Visibility,
 };
 pub use crate::engine::time::{Clock, Steps, Time};
 pub use crate::render::frame::{
@@ -39,3 +40,14 @@ impl Ord for FloatOrd {
     fn cmp(&self, o: &Self) -> std::cmp::Ordering { self.0.total_cmp(&o.0) }
 }
 pub use crate::render::standard::StandardMaterial;
+
+pub use glam::EulerRot;
+
+/// Bevy's `Dir3::as_vec3` (rc-metal's directions are plain `Vec3`s).
+pub trait AsVec3 {
+    fn as_vec3(self) -> Vec3;
+}
+
+impl AsVec3 for Vec3 {
+    fn as_vec3(self) -> Vec3 { self }
+}

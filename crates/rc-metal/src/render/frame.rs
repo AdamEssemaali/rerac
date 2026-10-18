@@ -586,7 +586,9 @@ impl Renderer {
     fn render_camera(&mut self, ctx: &Ctx, cb: &CommandBuffer, cam: Entity, window: Option<&Texture>, used: &mut usize) -> Result<()> {
         let (camera, gt, proj, layers, msaa, is3d, is2d, depth_op, default_ui) = {
             let w = &ctx.world;
-            let camera = w.get::<&Camera>(cam)?.clone();
+            let mut camera = (*w.get::<&Camera>(cam)?).clone();
+            // Bevy 0.19 keeps the target as its own component (`RenderTarget`); `Camera::target` otherwise.
+            if let Ok(t) = w.get::<&RenderTarget>(cam) { camera.target = (*t).clone(); }
             let gt = w.get::<&GlobalTransform>(cam).map(|g| *g).unwrap_or_default();
             let proj = w.get::<&Projection>(cam).ok().map(|p| (*p).clone());
             let layers = w.get::<&RenderLayers>(cam).ok().map(|l| (*l).clone()).unwrap_or_default();
@@ -620,7 +622,7 @@ impl Renderer {
             ClearColorConfig::None => None,
         };
         let projection = proj.unwrap_or(if is2d { Projection::Orthographic } else { Projection::default() });
-        let clip_from_view = projection.clip_from_view(size);
+        let clip_from_view = projection.clip_from_view_sub(size, camera.sub_camera_view.as_ref());
         let world_from_view = gt.to_matrix();
         let view_bytes = view_uniform(clip_from_view, world_from_view, Vec4::new(vx as f32, vy as f32, vw as f32, vh as f32));
         let view_info = ViewInfo { layers: layers.clone(), format, samples, view_from_world: world_from_view.inverse() };

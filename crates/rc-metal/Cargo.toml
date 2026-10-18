@@ -14,13 +14,19 @@ path = "src/main.rs"
 [dependencies]
 rc-formats = { path = "../rc-formats" }
 rc-data = { path = "../rc-data" }
+rc-game = { path = "../rc-game" }
+rc-video = { path = "../rc-video" }
 anyhow.workspace = true
 glam = "0.32"
 hecs = "0.11"
 png = "0.18"
 naga = { version = "29", features = ["wgsl-in", "msl-out"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
+rodio = { version = "0.22", default-features = false, features = ["playback"] }
 winit = "0.30"
 gilrs = "0.11"
 objc2 = "0.6"
@@ -30,3 +36,7 @@ objc2-metal = "0.3"
 objc2-quartz-core = "0.3"
 raw-window-handle = "0.6"
 raw-window-metal = "1.1"
+
+[features]
+# rc-engine's `dev` feature gates the dev keys (noclip); kept so `cfg!(feature = "dev")` means the same here.
+dev = []

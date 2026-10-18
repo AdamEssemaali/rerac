@@ -162,6 +162,13 @@ impl UiMaterials {
     }
 }
 
+/// Bevy's `UiMaterialPlugin::<M>`.
+pub fn add_ui_material<M: UiMaterial>(ctx: &mut crate::engine::ecs::Ctx) {
+    let mut m = ctx.res.remove::<UiMaterials>().unwrap_or_default();
+    m.add::<M>(ctx);
+    ctx.res.insert(m);
+}
+
 /// The nodes of `camera` in stacking order with their pixel rectangles (x, y, w, h).
 fn stack(world: &World, camera: Entity, default_camera: bool, target: Vec2) -> Vec<(Entity, Vec4)> {
     let mut children: HashMap<Entity, Vec<Entity>> = HashMap::new();

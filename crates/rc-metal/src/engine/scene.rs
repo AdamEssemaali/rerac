@@ -244,6 +244,14 @@ pub struct Viewport {
     pub physical_size: UVec2,
 }
 
+/// Bevy's `SubCameraView`: this camera renders the `size` sub-rectangle at `offset` of a `full_size` view.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct SubCameraView {
+    pub full_size: UVec2,
+    pub offset: glam::Vec2,
+    pub size: UVec2,
+}
+
 /// Bevy's `Camera` (the fields rc-engine sets).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Camera {
@@ -252,10 +260,13 @@ pub struct Camera {
     pub clear_color: ClearColorConfig,
     pub target: RenderTarget,
     pub viewport: Option<Viewport>,
+    pub sub_camera_view: Option<SubCameraView>,
 }
 
 impl Default for Camera {
-    fn default() -> Self { Camera { order: 0, is_active: true, clear_color: ClearColorConfig::Default, target: RenderTarget::Window, viewport: None } }
+    fn default() -> Self {
+        Camera { order: 0, is_active: true, clear_color: ClearColorConfig::Default, target: RenderTarget::Window, viewport: None, sub_camera_view: None }
+    }
 }
 
 /// Bevy's `Camera3d` marker.
@@ -269,6 +280,7 @@ pub struct Camera2d;
 /// rc-engine's cameras use a custom projection (crate::game_camera::GameProjection) or Bevy's defaults.
 pub trait CameraProjection: Send + Sync + std::fmt::Debug {
     fn get_clip_from_view(&self) -> Mat4;
+    fn get_clip_from_view_for_sub(&self, _sub: &SubCameraView) -> Mat4 { self.get_clip_from_view() }
     fn far(&self) -> f32;
     fn as_any(&self) -> &dyn std::any::Any;
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
@@ -301,6 +313,14 @@ impl Default for Projection {
 
 impl Projection {
     pub fn custom(p: impl CameraProjection + 'static) -> Self { Projection::Custom(CustomProjection(Box::new(p))) }
+
+    /// Clip from view for a target of `size` pixels, or for a sub view.
+    pub fn clip_from_view_sub(&self, size: UVec2, sub: Option<&SubCameraView>) -> Mat4 {
+        match (self, sub) {
+            (Projection::Custom(c), Some(s)) => c.0.get_clip_from_view_for_sub(s),
+            _ => self.clip_from_view(size),
+        }
+    }
 
     /// Clip from view for a target of `size` pixels.
     pub fn clip_from_view(&self, size: UVec2) -> Mat4 {
