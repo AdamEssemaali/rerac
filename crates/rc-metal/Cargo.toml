@@ -1,0 +1,29 @@
+[package]
+name = "rc-metal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Native Metal renderer for ReRAC on macOS, without Bevy (phase 1: terrain). docs/plan/metal_renderer.md."
+
+# Its own executable while the renderer grows next to rc-engine's Bevy/wgpu one: `cargo run -p rc-metal --release`.
+[[bin]]
+name = "rerac-metal"
+path = "src/main.rs"
+
+[dependencies]
+rc-formats = { path = "../rc-formats" }
+rc-data = { path = "../rc-data" }
+anyhow.workspace = true
+glam = "0.32"
+png = "0.18"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+winit = "0.30"
+objc2 = "0.6"
+objc2-core-foundation = "0.3"
+objc2-foundation = "0.3"
+objc2-metal = "0.3"
+objc2-quartz-core = "0.3"
+raw-window-handle = "0.6"
+raw-window-metal = "1.1"
