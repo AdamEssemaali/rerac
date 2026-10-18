@@ -15,9 +15,13 @@
 #[cfg(target_os = "macos")]
 mod app;
 mod camera;
+mod engine;
+#[cfg(target_os = "macos")]
+mod render;
 #[cfg(target_os = "macos")]
 mod gpu;
 mod level;
+mod shader;
 mod tfrag;
 
 #[cfg(target_os = "macos")]
